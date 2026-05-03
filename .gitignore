@@ -54,7 +54,7 @@ desktop.ini
 # Anything that references our development discussions, ADRs, AI_LOG, or
 # project-internal context belongs here.
 AI_LOG/
-README.md
+README.internal.md
 CLAUDE.md
 NOTICE
 .github/PULL_REQUEST_TEMPLATE.md
