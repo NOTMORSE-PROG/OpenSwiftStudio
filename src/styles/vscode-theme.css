@@ -1,0 +1,126 @@
+/*
+ * VS Code Default Dark+ palette as CSS custom properties.
+ * Tokens replicated from public VS Code theme — fair use (theme tokens are
+ * functional descriptions, not copyrightable expression).
+ *
+ * Update: any new token added here must use --vsc- prefix.
+ */
+
+:root {
+  /* Editor */
+  --vsc-editor-bg: #1e1e1e;
+  --vsc-editor-fg: #d4d4d4;
+  --vsc-editor-line-highlight: #2a2d2e;
+  --vsc-editor-selection: #264f78;
+  --vsc-editor-selection-inactive: #3a3d41;
+  --vsc-editor-cursor: #aeafad;
+  --vsc-editor-line-number: #858585;
+  --vsc-editor-line-number-active: #c6c6c6;
+
+  /* Sidebar */
+  --vsc-sidebar-bg: #252526;
+  --vsc-sidebar-fg: #cccccc;
+  --vsc-sidebar-section-header-bg: #252526;
+  --vsc-sidebar-border: #2b2b2b;
+
+  /* Activity bar */
+  --vsc-activity-bar-bg: #333333;
+  --vsc-activity-bar-fg: #ffffff;
+  --vsc-activity-bar-fg-inactive: #ffffff66;
+  --vsc-activity-bar-active-border: #007acc;
+  --vsc-activity-bar-active-bg: #ffffff14;
+  --vsc-activity-bar-badge-bg: #007acc;
+  --vsc-activity-bar-badge-fg: #ffffff;
+
+  /* Status bar */
+  --vsc-status-bar-bg: #007acc;
+  --vsc-status-bar-fg: #ffffff;
+  --vsc-status-bar-no-folder-bg: #68217a;
+  --vsc-status-bar-debugging-bg: #cc6633;
+  --vsc-status-bar-item-hover-bg: #ffffff20;
+
+  /* Title bar */
+  --vsc-title-bar-bg: #3c3c3c;
+  --vsc-title-bar-fg: #cccccc;
+  --vsc-title-bar-inactive-bg: #3c3c3c;
+  --vsc-title-bar-inactive-fg: #cccccc99;
+
+  /* Tabs */
+  --vsc-tab-bg: #2d2d2d;
+  --vsc-tab-active-bg: #1e1e1e;
+  --vsc-tab-fg: #ffffff80;
+  --vsc-tab-active-fg: #ffffff;
+  --vsc-tab-border: #252526;
+  --vsc-tab-active-border-top: #007acc;
+
+  /* Panel (bottom) */
+  --vsc-panel-bg: #1e1e1e;
+  --vsc-panel-border: #80808059;
+  --vsc-panel-title-fg: #e7e7e799;
+  --vsc-panel-title-active-fg: #e7e7e7;
+  --vsc-panel-title-active-border: #e7e7e7;
+
+  /* List / tree */
+  --vsc-list-hover-bg: #2a2d2e;
+  --vsc-list-active-selection-bg: #04395e;
+  --vsc-list-active-selection-fg: #ffffff;
+  --vsc-list-inactive-selection-bg: #37373d;
+  --vsc-list-focus-outline: #007fd4;
+
+  /* Input */
+  --vsc-input-bg: #3c3c3c;
+  --vsc-input-fg: #cccccc;
+  --vsc-input-border: #3c3c3c;
+  --vsc-input-placeholder: #a6a6a6;
+  --vsc-input-focus-border: #007fd4;
+
+  /* Button */
+  --vsc-button-bg: #0e639c;
+  --vsc-button-fg: #ffffff;
+  --vsc-button-hover-bg: #1177bb;
+  --vsc-button-secondary-bg: #3a3d41;
+  --vsc-button-secondary-fg: #ffffff;
+  --vsc-button-secondary-hover-bg: #45494e;
+
+  /* Scrollbar */
+  --vsc-scrollbar-shadow: #000000;
+  --vsc-scrollbar-slider-bg: #79797966;
+  --vsc-scrollbar-slider-hover-bg: #646464b3;
+  --vsc-scrollbar-slider-active-bg: #bfbfbf66;
+
+  /* Foreground / icons */
+  --vsc-fg: #cccccc;
+  --vsc-fg-secondary: #969696;
+  --vsc-icon-fg: #c5c5c5;
+  --vsc-link: #3794ff;
+  --vsc-link-hover: #4daafc;
+
+  /* Borders */
+  --vsc-border: #80808059;
+  --vsc-focus-border: #007fd4;
+  --vsc-contrast-border: transparent;
+
+  /* Notifications / badges */
+  --vsc-badge-bg: #4d4d4d;
+  --vsc-badge-fg: #ffffff;
+
+  /* Errors / warnings / info */
+  --vsc-error-fg: #f48771;
+  --vsc-warning-fg: #cca700;
+  --vsc-info-fg: #75beff;
+
+  /* Sizing */
+  --vsc-activity-bar-width: 48px;
+  --vsc-sidebar-width: 240px;
+  --vsc-status-bar-height: 22px;
+  --vsc-panel-height: 200px;
+  --vsc-tab-height: 35px;
+  --vsc-titlebar-height: 30px;
+
+  /* Typography */
+  --vsc-font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --vsc-mono-font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+  --vsc-font-size: 13px;
+  --vsc-font-size-small: 11px;
+  --vsc-line-height: 1.4;
+}

@@ -1,0 +1,32 @@
+[package]
+name = "openswiftstudio"
+version = "0.0.1"
+description = "Open-source standalone IDE for iOS development on Windows. No Mac required."
+authors = ["OpenSwiftStudio contributors"]
+license = "Apache-2.0"
+edition = "2021"
+rust-version = "1.77"
+
+# Larger optimizations for release; faster compile for dev.
+[profile.dev]
+incremental = true
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
+
+[lib]
+name = "openswiftstudio_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

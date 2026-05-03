@@ -1,0 +1,84 @@
+# Tauri / Rust
+src-tauri/target/
+src-tauri/Cargo.lock
+**/*.rs.bk
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+dist/
+dist-ssr/
+*.local
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Swift / SwiftPM
+.build/
+.swiftpm/
+Packages/
+xcuserdata/
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+DerivedData/
+.netrc
+
+# IDE / OS
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build artifacts (Windows)
+*.exe
+*.msi
+*.dll
+*.pdb
+!installer/build/*.exe.placeholder
+
+# Apple SDK / Xcode XIP — must NEVER be committed (legal)
+**/Xcode*.xip
+**/iPhoneOS*.sdk
+**/*Apple*.framework
+
+# AI / OS log artifacts
+*.log
+
+# Internal / local-only — never pushed.
+# Anything that references our development discussions, ADRs, AI_LOG, or
+# project-internal context belongs here.
+AI_LOG/
+README.md
+CLAUDE.md
+NOTICE
+.github/PULL_REQUEST_TEMPLATE.md
+.github/ISSUE_TEMPLATE/
+.github/labels.yml
+
+# Local credentials (never commit)
+.env
+.env.local
+.env.*.local
+credentials.json
+*.pem
+*.p12
+*.mobileprovision
+
+# Tauri build outputs
+src-tauri/gen/
+target/
+
+# Test coverage
+coverage/
+*.lcov
+
+# Temporary
+*.tmp
+*.swp
+*~
