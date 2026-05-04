@@ -1,9 +1,11 @@
 // OpenSwiftStudio — Tauri backend entry point.
 //
 // All platform-specific code lives behind clean trait boundaries in
-// `platform/`. M0.5 adds the setup wizard backend (`setup/`) and the
-// project-wide IPC command surface (`ipc.rs`).
+// `platform/`. M0.5 adds the setup wizard backend (`setup/`), the credential
+// storage primitive (`auth/`), and the project-wide IPC command surface
+// (`ipc.rs`).
 
+mod auth;
 mod platform;
 mod setup;
 mod ipc;
@@ -13,6 +15,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_http::init())
         .invoke_handler(tauri::generate_handler![
             ipc::app_info,
             ipc::setup_get_state,

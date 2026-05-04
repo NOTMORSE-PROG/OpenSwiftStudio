@@ -36,7 +36,7 @@ pub struct StepRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct VsBuildToolsRecord {
+pub struct DetectionRecord {
     pub found: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
@@ -46,6 +46,14 @@ pub struct VsBuildToolsRecord {
     pub install_path: Option<String>,
     pub detected_at: String,
 }
+
+// Aliases preserve the existing JSON field names introduced in the foundation
+// chunk (vsBuildToolsDetected) while letting the new wsl2/usbipd/swift records
+// share the same shape.
+pub type VsBuildToolsRecord = DetectionRecord;
+pub type Wsl2Record = DetectionRecord;
+pub type UsbipdRecord = DetectionRecord;
+pub type SwiftRecord = DetectionRecord;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,6 +65,12 @@ pub struct SetupState {
     pub steps: BTreeMap<String, StepRecord>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vs_build_tools_detected: Option<VsBuildToolsRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wsl2_detected: Option<Wsl2Record>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usbipd_detected: Option<UsbipdRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub swift_detected: Option<SwiftRecord>,
 }
 
 fn setup_dir() -> Result<PathBuf, SetupError> {
@@ -131,7 +145,7 @@ mod tests {
             StepRecord {
                 completed: false,
                 skipped: true,
-                reason: Some("stub-in-foundation-chunk".to_string()),
+                reason: Some("stub".to_string()),
             },
         );
         SetupState {
@@ -146,7 +160,61 @@ mod tests {
                 install_path: None,
                 detected_at: "2026-05-04T12:34:56Z".to_string(),
             }),
+            wsl2_detected: None,
+            usbipd_detected: None,
+            swift_detected: None,
         }
+    }
+
+    #[test]
+    fn new_detection_records_serialize_to_camelcase_keys() {
+        let mut s = sample_state();
+        s.wsl2_detected = Some(DetectionRecord {
+            found: true,
+            display_name: Some("Windows Subsystem for Linux".to_string()),
+            version: Some("2.0.9.0".to_string()),
+            install_path: None,
+            detected_at: "2026-05-05T10:00:00Z".to_string(),
+        });
+        s.usbipd_detected = Some(DetectionRecord {
+            found: false,
+            display_name: None,
+            version: None,
+            install_path: None,
+            detected_at: "2026-05-05T10:00:00Z".to_string(),
+        });
+        let json = serde_json::to_string_pretty(&s).expect("serialize");
+        assert!(json.contains("\"wsl2Detected\""), "expected wsl2Detected key");
+        assert!(json.contains("\"usbipdDetected\""), "expected usbipdDetected key");
+        // swift_detected stays None and should be omitted.
+        assert!(!json.contains("\"swiftDetected\""), "None field should be skipped");
+        let parsed: SetupState = serde_json::from_str(&json).expect("deserialize");
+        assert!(parsed.wsl2_detected.is_some());
+        assert!(parsed.usbipd_detected.is_some());
+        assert!(parsed.swift_detected.is_none());
+    }
+
+    #[test]
+    fn old_setup_json_without_new_fields_round_trips() {
+        // Simulate a setup.json written before the new detection fields existed.
+        let legacy = r#"{
+            "schemaVersion": 1,
+            "completedAt": "2026-05-04T09:00:50.745Z",
+            "appVersion": "0.0.1",
+            "steps": {
+                "welcome": { "completed": true, "skipped": false },
+                "done": { "completed": true, "skipped": false }
+            },
+            "vsBuildToolsDetected": {
+                "found": false,
+                "detectedAt": "2026-05-04T09:00:50.745Z"
+            }
+        }"#;
+        let parsed: SetupState = serde_json::from_str(legacy).expect("legacy file should still parse");
+        assert_eq!(parsed.schema_version, 1);
+        assert!(parsed.wsl2_detected.is_none());
+        assert!(parsed.usbipd_detected.is_none());
+        assert!(parsed.swift_detected.is_none());
     }
 
     #[test]

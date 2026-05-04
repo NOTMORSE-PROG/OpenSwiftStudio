@@ -7,6 +7,14 @@
     "core:default",
     "shell:allow-open",
     "dialog:allow-open",
-    "dialog:allow-save"
+    "dialog:allow-save",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://download.swift.org/**" },
+        { "url": "https://github.com/dorssel/usbipd-win/releases/**" },
+        { "url": "https://developer.apple.com/**" }
+      ]
+    }
   ]
 }

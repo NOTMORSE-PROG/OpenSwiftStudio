@@ -8,7 +8,6 @@ import {
   onMount,
 } from "solid-js";
 import {
-  SetupStepId,
   STEP_ORDER,
   currentStep,
   goNext,
@@ -24,7 +23,10 @@ import {
   SetupCheckResult,
   SetupState,
   StepRecord,
+  checkToolchain,
+  checkUsbipd,
   checkVsBuildTools,
+  checkWsl2,
   getSetupState,
   markSetupComplete,
   openExternal,
@@ -35,6 +37,9 @@ const APP_VERSION_FALLBACK = "0.0.1";
 const SCHEMA_VERSION = 1;
 const VS_BUILD_TOOLS_DOCS_URL =
   "https://visualstudio.microsoft.com/visual-cpp-build-tools/";
+const WSL_DOCS_URL = "https://learn.microsoft.com/windows/wsl/install";
+const USBIPD_DOCS_URL = "https://github.com/dorssel/usbipd-win/releases/latest";
+const SWIFT_DOCS_URL = "https://www.swift.org/install/windows/";
 
 const SetupWizard: Component = () => {
   const isFirstStep = () => currentStep() === STEP_ORDER[0];
@@ -42,6 +47,20 @@ const SetupWizard: Component = () => {
 
   const [hasExistingSetup, setHasExistingSetup] = createSignal(false);
   const [vsBuildTools, setVsBuildTools] = createSignal<SetupCheckResult | null>(null);
+  const [wsl2Result, setWsl2Result] = createSignal<SetupCheckResult | null>(null);
+  const [usbipdResult, setUsbipdResult] = createSignal<SetupCheckResult | null>(null);
+  const [swiftResult, setSwiftResult] = createSignal<SetupCheckResult | null>(null);
+
+  const detectionToRecord = (r: SetupCheckResult | null, now: string) =>
+    r
+      ? {
+          found: r.found,
+          displayName: r.displayName,
+          version: r.version,
+          installPath: r.installPath,
+          detectedAt: now,
+        }
+      : undefined;
 
   onMount(async () => {
     try {
@@ -82,25 +101,19 @@ const SetupWizard: Component = () => {
         skipped: !isWelcomeOrDone && state.status !== "detected",
         reason:
           !isWelcomeOrDone && state.status !== "detected"
-            ? "stub-in-foundation-chunk"
+            ? "detect-only"
             : undefined,
       };
     }
-    const vs = vsBuildTools();
     const next: SetupState = {
       schemaVersion: SCHEMA_VERSION,
       completedAt: now,
       appVersion: APP_VERSION_FALLBACK,
       steps,
-      vsBuildToolsDetected: vs
-        ? {
-            found: vs.found,
-            displayName: vs.displayName,
-            version: vs.version,
-            installPath: vs.installPath,
-            detectedAt: now,
-          }
-        : undefined,
+      vsBuildToolsDetected: detectionToRecord(vsBuildTools(), now),
+      wsl2Detected: detectionToRecord(wsl2Result(), now),
+      usbipdDetected: detectionToRecord(usbipdResult(), now),
+      swiftDetected: detectionToRecord(swiftResult(), now),
     };
     try {
       await markSetupComplete(next);
@@ -141,23 +154,23 @@ const SetupWizard: Component = () => {
                 <WelcomeStep />
               </Match>
               <Match when={currentStep() === "wsl2"}>
-                <PrereqStubStep
-                  id="wsl2"
-                  title="Windows Subsystem for Linux 2"
-                  description="WSL2 hosts the libimobiledevice + xtool bridge that lets the IDE talk to a real iPhone over USB. Detection and install land in the next setup-wizard chunk."
+                <Wsl2Step
+                  result={wsl2Result()}
+                  onResult={(r) => setWsl2Result(r)}
                 />
               </Match>
               <Match when={currentStep() === "usbipd"}>
-                <PrereqStubStep
-                  id="usbipd"
-                  title="usbipd-win"
-                  description="Bridges your USB-connected iPhone into WSL2 so xtool can sign and deploy. Detection and install land in the next setup-wizard chunk."
+                <UsbipdStep
+                  result={usbipdResult()}
+                  onResult={(r) => setUsbipdResult(r)}
                 />
               </Match>
               <Match when={currentStep() === "toolchain"}>
                 <ToolchainStep
                   vsBuildTools={vsBuildTools()}
                   onVsBuildToolsResult={(r) => setVsBuildTools(r)}
+                  swift={swiftResult()}
+                  onSwiftResult={(r) => setSwiftResult(r)}
                 />
               </Match>
               <Match when={currentStep() === "apple-id"}>
@@ -202,58 +215,235 @@ const WelcomeStep: Component = () => (
   </section>
 );
 
-type PrereqStubStepProps = {
-  id: SetupStepId;
-  title: string;
-  description: string;
+// Single check-row block used by Wsl2Step / UsbipdStep / ToolchainStep.
+// Inlined here rather than a generic component because each call site needs
+// slightly different copy + URL handling, and the row is small.
+type CheckRowProps = {
+  result: SetupCheckResult | null;
+  busy: boolean;
+  label: string;
+  onDetect: () => void;
+  installUrl: string;
+  installButtonLabel: string;
 };
 
-const PrereqStubStep: Component<PrereqStubStepProps> = (props) => (
-  <section class="setup-step">
-    <h2 class="setup-step__heading">{props.title}</h2>
-    <p class="setup-step__body">{props.description}</p>
-    <div class="setup-step__check-row">
-      <span class="setup-step__badge is-skipped">Skipped (stub)</span>
-      <span class="setup-step__check-label">
-        Real detection lands in the next setup-wizard chunk.
-      </span>
+const CheckRow: Component<CheckRowProps> = (props) => (
+  <div class="setup-step__check-row">
+    <span
+      class="setup-step__badge"
+      classList={{
+        "is-pending": !props.result && !props.busy,
+        "is-checking": props.busy,
+        "is-detected": !!props.result?.found,
+        "is-missing": props.result !== null && !props.result.found,
+      }}
+    >
+      {props.busy
+        ? "Checking..."
+        : props.result
+        ? props.result.found
+          ? "Detected"
+          : "Not detected"
+        : "Not checked"}
+    </span>
+    <div class="setup-step__check-content">
+      <div class="setup-step__check-label">{props.label}</div>
+      <Show when={props.result}>
+        <div class="setup-step__check-detail">
+          {props.result?.displayName ?? ""}
+          {props.result?.version ? ` ${props.result.version}` : ""}
+          {props.result?.installPath ? (
+            <>
+              <br />
+              <span class="setup-step__check-path">
+                {props.result.installPath}
+              </span>
+            </>
+          ) : null}
+          <Show when={props.result?.message}>
+            <br />
+            <span class="setup-step__check-detail">{props.result?.message}</span>
+          </Show>
+        </div>
+      </Show>
     </div>
-  </section>
+    <div class="setup-step__check-actions">
+      <button
+        class="setup-wizard__btn setup-wizard__btn--secondary"
+        onClick={props.onDetect}
+        disabled={props.busy}
+      >
+        Detect
+      </button>
+      <Show when={props.result !== null && !props.result?.found}>
+        <button
+          class="setup-wizard__btn"
+          onClick={() => void openExternal(props.installUrl)}
+        >
+          {props.installButtonLabel}
+        </button>
+      </Show>
+    </div>
+  </div>
 );
+
+type DetectStepProps = {
+  result: SetupCheckResult | null;
+  onResult: (r: SetupCheckResult) => void;
+};
+
+const Wsl2Step: Component<DetectStepProps> = (props) => {
+  const [busy, setBusy] = createSignal(false);
+  const runDetect = async () => {
+    setBusy(true);
+    updateStep("wsl2", { status: "checking", message: "" });
+    try {
+      const result = await checkWsl2();
+      props.onResult(result);
+      updateStep("wsl2", {
+        status: result.found ? "detected" : "missing",
+        message: result.found
+          ? `${result.displayName ?? "WSL"}${result.version ? ` ${result.version}` : ""}`
+          : result.message ?? "WSL2 not detected.",
+      });
+    } catch (err) {
+      updateStep("wsl2", { status: "error", message: `Detection failed: ${String(err)}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section class="setup-step">
+      <h2 class="setup-step__heading">Windows Subsystem for Linux 2</h2>
+      <p class="setup-step__body">
+        WSL2 hosts the libimobiledevice + xtool bridge that lets the IDE talk to a real
+        iPhone over USB. Detection here only — the assisted install (UAC + reboot
+        guidance) lands in the next setup-wizard chunk.
+      </p>
+      <CheckRow
+        result={props.result}
+        busy={busy()}
+        label="Windows Subsystem for Linux 2"
+        onDetect={runDetect}
+        installUrl={WSL_DOCS_URL}
+        installButtonLabel="Get WSL2"
+      />
+    </section>
+  );
+};
+
+const UsbipdStep: Component<DetectStepProps> = (props) => {
+  const [busy, setBusy] = createSignal(false);
+  const runDetect = async () => {
+    setBusy(true);
+    updateStep("usbipd", { status: "checking", message: "" });
+    try {
+      const result = await checkUsbipd();
+      props.onResult(result);
+      updateStep("usbipd", {
+        status: result.found ? "detected" : "missing",
+        message: result.found
+          ? `${result.displayName ?? "usbipd-win"}${result.version ? ` ${result.version}` : ""}`
+          : result.message ?? "usbipd-win not detected.",
+      });
+    } catch (err) {
+      updateStep("usbipd", { status: "error", message: `Detection failed: ${String(err)}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section class="setup-step">
+      <h2 class="setup-step__heading">usbipd-win</h2>
+      <p class="setup-step__body">
+        Bridges your USB-connected iPhone into WSL2 so xtool can sign and deploy. Detection
+        here only — the assisted install (winget primary, MSI fallback) lands in the next
+        setup-wizard chunk.
+      </p>
+      <CheckRow
+        result={props.result}
+        busy={busy()}
+        label="usbipd-win"
+        onDetect={runDetect}
+        installUrl={USBIPD_DOCS_URL}
+        installButtonLabel="Get usbipd-win"
+      />
+    </section>
+  );
+};
 
 type ToolchainStepProps = {
   vsBuildTools: SetupCheckResult | null;
   onVsBuildToolsResult: (r: SetupCheckResult) => void;
+  swift: SetupCheckResult | null;
+  onSwiftResult: (r: SetupCheckResult) => void;
 };
 
 const ToolchainStep: Component<ToolchainStepProps> = (props) => {
-  const [busy, setBusy] = createSignal(false);
+  const [vsBusy, setVsBusy] = createSignal(false);
+  const [swiftBusy, setSwiftBusy] = createSignal(false);
 
-  const runDetect = async () => {
-    setBusy(true);
+  // Toolchain step status reflects the *combined* prereqs: only "detected"
+  // when both VS Build Tools and Swift are found, otherwise the worst-case
+  // status (missing/error) wins so the stepper dot reads accurately.
+  const updateCombinedStatus = () => {
+    const vs = props.vsBuildTools;
+    const sw = props.swift;
+    if (!vs || !sw) {
+      // Some checks haven't run yet — leave whatever was set by the most
+      // recent runDetect call alone.
+      return;
+    }
+    if (vs.found && sw.found) {
+      updateStep("toolchain", {
+        status: "detected",
+        message: `Both VS Build Tools (${vs.version ?? "?"}) and Swift (${sw.version ?? "?"}) detected.`,
+      });
+    } else {
+      const missing = [
+        !vs.found ? "VS Build Tools" : null,
+        !sw.found ? "Swift" : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
+      updateStep("toolchain", {
+        status: "missing",
+        message: `Missing: ${missing}.`,
+      });
+    }
+  };
+
+  const runVsDetect = async () => {
+    setVsBusy(true);
     updateStep("toolchain", { status: "checking", message: "" });
     try {
       const result = await checkVsBuildTools();
       props.onVsBuildToolsResult(result);
-      if (result.found) {
-        const versionLine = result.version ? ` ${result.version}` : "";
-        updateStep("toolchain", {
-          status: "detected",
-          message: `${result.displayName ?? "Visual Studio Build Tools"}${versionLine}`,
-        });
-      } else {
-        updateStep("toolchain", {
-          status: "missing",
-          message: result.message ?? "Visual Studio Build Tools not detected.",
-        });
-      }
+      updateCombinedStatus();
     } catch (err) {
       updateStep("toolchain", {
         status: "error",
-        message: `Detection failed: ${String(err)}`,
+        message: `VS Build Tools detection failed: ${String(err)}`,
       });
     } finally {
-      setBusy(false);
+      setVsBusy(false);
+    }
+  };
+
+  const runSwiftDetect = async () => {
+    setSwiftBusy(true);
+    updateStep("toolchain", { status: "checking", message: "" });
+    try {
+      const result = await checkToolchain();
+      props.onSwiftResult(result);
+      updateCombinedStatus();
+    } catch (err) {
+      updateStep("toolchain", {
+        status: "error",
+        message: `Swift detection failed: ${String(err)}`,
+      });
+    } finally {
+      setSwiftBusy(false);
     }
   };
 
@@ -261,80 +451,28 @@ const ToolchainStep: Component<ToolchainStepProps> = (props) => {
     <section class="setup-step">
       <h2 class="setup-step__heading">Toolchain prerequisites</h2>
       <p class="setup-step__body">
-        Swift on Windows compiles against MSVC. We detect Visual Studio Build Tools 2019+
-        here. The Swift 6.2.0 toolchain itself is downloaded and verified in the next
-        setup-wizard chunk.
+        Swift on Windows compiles against MSVC, so the wizard checks both. The Swift
+        toolchain download + verify itself lands in the next setup-wizard chunk; here we
+        just confirm whether you already have a version installed.
       </p>
 
-      <div class="setup-step__check-row">
-        <span
-          class="setup-step__badge"
-          classList={{
-            "is-pending": !props.vsBuildTools && !busy(),
-            "is-checking": busy(),
-            "is-detected": !!props.vsBuildTools?.found,
-            "is-missing": props.vsBuildTools !== null && !props.vsBuildTools.found,
-          }}
-        >
-          {busy()
-            ? "Checking..."
-            : props.vsBuildTools
-            ? props.vsBuildTools.found
-              ? "Detected"
-              : "Not detected"
-            : "Not checked"}
-        </span>
-        <div class="setup-step__check-content">
-          <div class="setup-step__check-label">Visual Studio Build Tools 2019+</div>
-          <Show when={props.vsBuildTools}>
-            <div class="setup-step__check-detail">
-              {props.vsBuildTools?.displayName ?? ""}
-              {props.vsBuildTools?.version ? ` ${props.vsBuildTools.version}` : ""}
-              {props.vsBuildTools?.installPath ? (
-                <>
-                  <br />
-                  <span class="setup-step__check-path">
-                    {props.vsBuildTools.installPath}
-                  </span>
-                </>
-              ) : null}
-              <Show when={props.vsBuildTools?.message}>
-                <br />
-                <span class="setup-step__check-detail">
-                  {props.vsBuildTools?.message}
-                </span>
-              </Show>
-            </div>
-          </Show>
-        </div>
-        <div class="setup-step__check-actions">
-          <button
-            class="setup-wizard__btn setup-wizard__btn--secondary"
-            onClick={runDetect}
-            disabled={busy()}
-          >
-            Detect
-          </button>
-          <Show when={props.vsBuildTools !== null && !props.vsBuildTools?.found}>
-            <button
-              class="setup-wizard__btn"
-              onClick={() => void openExternal(VS_BUILD_TOOLS_DOCS_URL)}
-            >
-              Get Build Tools
-            </button>
-          </Show>
-        </div>
-      </div>
+      <CheckRow
+        result={props.vsBuildTools}
+        busy={vsBusy()}
+        label="Visual Studio Build Tools 2019+"
+        onDetect={runVsDetect}
+        installUrl={VS_BUILD_TOOLS_DOCS_URL}
+        installButtonLabel="Get Build Tools"
+      />
 
-      <div class="setup-step__check-row">
-        <span class="setup-step__badge is-skipped">Skipped (stub)</span>
-        <div class="setup-step__check-content">
-          <div class="setup-step__check-label">Swift 6.2.0 toolchain</div>
-          <div class="setup-step__check-detail">
-            Download + verify lands in the next setup-wizard chunk (M0.5-5).
-          </div>
-        </div>
-      </div>
+      <CheckRow
+        result={props.swift}
+        busy={swiftBusy()}
+        label="Swift toolchain"
+        onDetect={runSwiftDetect}
+        installUrl={SWIFT_DOCS_URL}
+        installButtonLabel="Get Swift"
+      />
     </section>
   );
 };

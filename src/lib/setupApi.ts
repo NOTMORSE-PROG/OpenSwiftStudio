@@ -15,7 +15,7 @@ export type StepRecord = {
   reason?: string;
 };
 
-export type VsBuildToolsRecord = {
+export type DetectionRecord = {
   found: boolean;
   displayName?: string;
   version?: string;
@@ -23,12 +23,22 @@ export type VsBuildToolsRecord = {
   detectedAt: string;
 };
 
+// Aliases keep the original VsBuildToolsRecord name while letting all
+// detection records share one shape on the wire (see src-tauri/src/setup/state.rs).
+export type VsBuildToolsRecord = DetectionRecord;
+export type Wsl2Record = DetectionRecord;
+export type UsbipdRecord = DetectionRecord;
+export type SwiftRecord = DetectionRecord;
+
 export type SetupState = {
   schemaVersion: number;
   completedAt?: string;
   appVersion: string;
   steps: Record<string, StepRecord>;
   vsBuildToolsDetected?: VsBuildToolsRecord;
+  wsl2Detected?: Wsl2Record;
+  usbipdDetected?: UsbipdRecord;
+  swiftDetected?: SwiftRecord;
 };
 
 export const getSetupState = (): Promise<SetupState | null> =>
