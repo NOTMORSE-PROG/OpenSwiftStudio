@@ -10,9 +10,13 @@
 
 use chrono::Utc;
 use serde_json::Value;
+use tauri::Emitter;
 
 use crate::setup::checks::{self, CheckResult};
+use crate::setup::installs::{self, InstallOutcome};
 use crate::setup::state::{self, SetupState};
+
+const INSTALL_PROGRESS_EVENT: &str = "setup-install-progress";
 
 #[tauri::command]
 pub fn app_info() -> Value {
@@ -64,6 +68,54 @@ pub fn setup_check_usbipd() -> CheckResult {
 #[tauri::command]
 pub fn setup_check_toolchain() -> CheckResult {
     checks::check_toolchain()
+}
+
+// ---------- Setup wizard installs (M0.5-3, M0.5-4) ----------
+//
+// Async because the underlying subprocess can take 10–60 s. Each emits a
+// `setup-install-progress` event per output line so the wizard can render a
+// live log preview while the install runs. The payload is `{ id, line }`
+// where `id` distinguishes which install the line belongs to.
+
+#[derive(serde::Serialize, Clone)]
+struct InstallProgressPayload<'a> {
+    id: &'a str,
+    line: &'a str,
+}
+
+#[tauri::command]
+pub async fn setup_install_wsl2(window: tauri::Window) -> Result<InstallOutcome, String> {
+    // tauri::Window isn't Send across the await point, so we run the blocking
+    // install on a dedicated thread and pump progress events back via the
+    // window handle (which is cheaply cloneable).
+    let win = window.clone();
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        installs::install_wsl2(|line| {
+            let _ = win.emit(
+                INSTALL_PROGRESS_EVENT,
+                InstallProgressPayload { id: "wsl2", line },
+            );
+        })
+    })
+    .await
+    .map_err(|e| format!("install task panicked: {e}"))?;
+    Ok(outcome)
+}
+
+#[tauri::command]
+pub async fn setup_install_usbipd(window: tauri::Window) -> Result<InstallOutcome, String> {
+    let win = window.clone();
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        installs::install_usbipd(|line| {
+            let _ = win.emit(
+                INSTALL_PROGRESS_EVENT,
+                InstallProgressPayload { id: "usbipd", line },
+            );
+        })
+    })
+    .await
+    .map_err(|e| format!("install task panicked: {e}"))?;
+    Ok(outcome)
 }
 
 // ---------- Forward-looking stubs ----------

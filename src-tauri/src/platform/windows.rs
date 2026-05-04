@@ -554,6 +554,108 @@ fn parse_swift_version(text: &str) -> Option<String> {
     }
 }
 
+// ---------- Installs ----------
+
+use crate::setup::installs::{
+    output_indicates_reboot, run_capture_utf16le, run_streaming, InstallOutcome,
+};
+
+/// Spawn `wsl --install --no-launch`, capture its UTF-16 LE output, and
+/// classify the result. Windows handles its own UAC prompt — we don't try to
+/// elevate ourselves. `--no-launch` skips auto-starting the new distro, which
+/// would otherwise spawn another elevation prompt from inside our subprocess.
+pub fn install_wsl2<F>(mut on_line: F) -> InstallOutcome
+where
+    F: FnMut(&str),
+{
+    let mut cmd = Command::new("wsl.exe");
+    cmd.args(["--install", "--no-launch"])
+        .creation_flags(CREATE_NO_WINDOW);
+
+    match run_capture_utf16le(&mut cmd, &mut on_line) {
+        Ok((exit_code, captured)) => {
+            if output_indicates_reboot(&captured) {
+                InstallOutcome::RebootRequired { stdout: captured }
+            } else if exit_code == 0 {
+                InstallOutcome::Success { stdout: captured }
+            } else {
+                InstallOutcome::Failed {
+                    exit_code,
+                    stderr: captured,
+                }
+            }
+        }
+        Err(e) => InstallOutcome::Failed {
+            exit_code: -1,
+            stderr: format!("Could not invoke wsl.exe: {e}"),
+        },
+    }
+}
+
+/// Try `winget install --id dorssel.usbipd-win --silent` first; if winget is
+/// absent, fall back to downloading the latest release MSI from the
+/// `tauri-plugin-http`-scoped GitHub URL and invoking `msiexec /i <path> /quiet`.
+/// The MSI fallback path lands alongside the Swift toolchain download (same
+/// download infrastructure); for now we emit a clear "winget required" error
+/// if winget is absent so the user has an actionable next step.
+pub fn install_usbipd<F>(mut on_line: F) -> InstallOutcome
+where
+    F: FnMut(&str),
+{
+    if !winget_present() {
+        return InstallOutcome::Failed {
+            exit_code: -1,
+            stderr:
+                "winget not detected. Install App Installer from the Microsoft Store, or download \
+                 the usbipd-win MSI directly from \
+                 https://github.com/dorssel/usbipd-win/releases/latest ."
+                    .to_string(),
+        };
+    }
+
+    let mut cmd = Command::new("winget");
+    cmd.args([
+        "install",
+        "--id",
+        "dorssel.usbipd-win",
+        "--silent",
+        "--accept-source-agreements",
+        "--accept-package-agreements",
+    ])
+    .creation_flags(CREATE_NO_WINDOW);
+
+    match run_streaming(&mut cmd, &mut on_line) {
+        Ok((0, captured)) => InstallOutcome::Success { stdout: captured },
+        Ok((exit_code, captured)) => {
+            // winget exit code 0x8A150011 (-1978335215) = no applicable update found
+            // (i.e. already at latest); treat as success.
+            if exit_code == -1_978_335_215_i32 {
+                InstallOutcome::Success { stdout: captured }
+            } else {
+                InstallOutcome::Failed {
+                    exit_code,
+                    stderr: captured,
+                }
+            }
+        }
+        Err(e) => InstallOutcome::Failed {
+            exit_code: -1,
+            stderr: format!("Could not invoke winget: {e}"),
+        },
+    }
+}
+
+fn winget_present() -> bool {
+    Command::new("winget")
+        .arg("--version")
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
 // ---------- Shared helpers ----------
 
 fn parse_major(version: &str) -> Option<u32> {

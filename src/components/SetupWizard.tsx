@@ -20,6 +20,8 @@ import {
   updateStep,
 } from "../state/setupState";
 import {
+  InstallId,
+  InstallOutcome,
   SetupCheckResult,
   SetupState,
   StepRecord,
@@ -28,7 +30,10 @@ import {
   checkVsBuildTools,
   checkWsl2,
   getSetupState,
+  installUsbipd,
+  installWsl2,
   markSetupComplete,
+  onInstallProgress,
   openExternal,
 } from "../lib/setupApi";
 import SetupStepper from "./SetupStepper";
@@ -317,8 +322,9 @@ const Wsl2Step: Component<DetectStepProps> = (props) => {
       <h2 class="setup-step__heading">Windows Subsystem for Linux 2</h2>
       <p class="setup-step__body">
         WSL2 hosts the libimobiledevice + xtool bridge that lets the IDE talk to a real
-        iPhone over USB. Detection here only — the assisted install (UAC + reboot
-        guidance) lands in the next setup-wizard chunk.
+        iPhone over USB. Click Detect to check; if missing, the Install button runs{" "}
+        <code>wsl --install</code> (Windows shows a UAC prompt). A reboot is usually required
+        the first time WSL2 is installed.
       </p>
       <CheckRow
         result={props.result}
@@ -328,6 +334,14 @@ const Wsl2Step: Component<DetectStepProps> = (props) => {
         installUrl={WSL_DOCS_URL}
         installButtonLabel="Get WSL2"
       />
+      <Show when={props.result !== null && !props.result?.found}>
+        <InstallControls
+          id="wsl2"
+          run={installWsl2}
+          afterSuccess={runDetect}
+          rebootMessage="Reboot recommended to finish WSL2 install. The wizard will re-detect WSL on next launch."
+        />
+      </Show>
     </section>
   );
 };
@@ -356,9 +370,9 @@ const UsbipdStep: Component<DetectStepProps> = (props) => {
     <section class="setup-step">
       <h2 class="setup-step__heading">usbipd-win</h2>
       <p class="setup-step__body">
-        Bridges your USB-connected iPhone into WSL2 so xtool can sign and deploy. Detection
-        here only — the assisted install (winget primary, MSI fallback) lands in the next
-        setup-wizard chunk.
+        Bridges your USB-connected iPhone into WSL2 so xtool can sign and deploy. Click
+        Detect to check; if missing, the Install button runs{" "}
+        <code>winget install dorssel.usbipd-win</code> (Windows shows a UAC prompt).
       </p>
       <CheckRow
         result={props.result}
@@ -368,7 +382,96 @@ const UsbipdStep: Component<DetectStepProps> = (props) => {
         installUrl={USBIPD_DOCS_URL}
         installButtonLabel="Get usbipd-win"
       />
+      <Show when={props.result !== null && !props.result?.found}>
+        <InstallControls
+          id="usbipd"
+          run={installUsbipd}
+          afterSuccess={runDetect}
+        />
+      </Show>
     </section>
+  );
+};
+
+type InstallControlsProps = {
+  id: InstallId;
+  run: () => Promise<InstallOutcome>;
+  afterSuccess: () => Promise<void> | void;
+  rebootMessage?: string;
+};
+
+const InstallControls: Component<InstallControlsProps> = (props) => {
+  const [installing, setInstalling] = createSignal(false);
+  const [logLines, setLogLines] = createSignal<string[]>([]);
+  const [outcome, setOutcome] = createSignal<InstallOutcome | null>(null);
+
+  // Subscribe once for the lifetime of this component; filter by `id` so two
+  // parallel-mounted InstallControls don't bleed each other's log lines.
+  let unlisten: (() => void) | undefined;
+  onMount(async () => {
+    unlisten = await onInstallProgress((id, line) => {
+      if (id !== props.id) return;
+      setLogLines((prev) => {
+        const next = [...prev, line];
+        return next.length > 8 ? next.slice(next.length - 8) : next;
+      });
+    });
+  });
+  onCleanup(() => unlisten?.());
+
+  const runInstall = async () => {
+    setInstalling(true);
+    setLogLines([]);
+    setOutcome(null);
+    try {
+      const result = await props.run();
+      setOutcome(result);
+      if (result.kind === "success") {
+        await props.afterSuccess();
+      }
+    } catch (err) {
+      setOutcome({
+        kind: "failed",
+        exitCode: -1,
+        stderr: `Install failed: ${String(err)}`,
+      });
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  return (
+    <div class="setup-install">
+      <div class="setup-install__row">
+        <button
+          class="setup-wizard__btn"
+          onClick={runInstall}
+          disabled={installing()}
+        >
+          {installing() ? "Installing..." : "Install"}
+        </button>
+        <span class="setup-install__hint">
+          Windows will prompt for administrator permission.
+        </span>
+      </div>
+      <Show when={installing() || logLines().length > 0}>
+        <pre class="setup-install__log">
+          {logLines().length === 0 ? "Starting installer..." : logLines().join("\n")}
+        </pre>
+      </Show>
+      <Show when={outcome()?.kind === "rebootRequired"}>
+        <div class="setup-install__alert setup-install__alert--reboot">
+          {props.rebootMessage ??
+            "Reboot recommended to finish the install. The wizard will re-detect on next launch."}
+        </div>
+      </Show>
+      <Show when={outcome()?.kind === "failed"}>
+        <div class="setup-install__alert setup-install__alert--error">
+          Install failed (exit {(outcome() as { exitCode: number }).exitCode}).{" "}
+          {(outcome() as { stderr: string }).stderr}
+        </div>
+      </Show>
+    </div>
   );
 };
 
@@ -451,9 +554,9 @@ const ToolchainStep: Component<ToolchainStepProps> = (props) => {
     <section class="setup-step">
       <h2 class="setup-step__heading">Toolchain prerequisites</h2>
       <p class="setup-step__body">
-        Swift on Windows compiles against MSVC, so the wizard checks both. The Swift
-        toolchain download + verify itself lands in the next setup-wizard chunk; here we
-        just confirm whether you already have a version installed.
+        Swift on Windows compiles against MSVC, so the wizard checks both. Assisted Swift
+        toolchain download + verify is coming in a follow-up; for now this step just
+        confirms whether you already have a version installed.
       </p>
 
       <CheckRow
@@ -481,14 +584,14 @@ const AppleIdStubStep: Component = () => (
   <section class="setup-step">
     <h2 class="setup-step__heading">Apple ID</h2>
     <p class="setup-step__body">
-      The next setup-wizard chunk will collect your free Apple ID and let you drop in the
-      Xcode .xip you download from <em>developer.apple.com</em>. We never re-host the .xip
-      (clean-room rules); you fetch it under your own account.
+      A follow-up step will collect your free Apple ID and let you drop in the Xcode .xip
+      you download from <em>developer.apple.com</em>. We never re-host the .xip (clean-room
+      rules); you fetch it under your own account.
     </p>
     <div class="setup-step__check-row">
       <span class="setup-step__badge is-skipped">Skipped (stub)</span>
       <span class="setup-step__check-label">
-        Apple ID + Xcode .xip flow lands in M0.5-6.
+        Apple ID + Xcode .xip flow lands in a follow-up.
       </span>
     </div>
   </section>

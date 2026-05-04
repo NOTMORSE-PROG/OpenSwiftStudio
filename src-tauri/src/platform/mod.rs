@@ -15,10 +15,19 @@ pub(crate) mod linux;
 pub(crate) mod macos;
 
 #[cfg(target_os = "windows")]
-pub use windows::{check_vs_build_tools, check_wsl2, check_usbipd, check_toolchain};
+pub use windows::{
+    check_vs_build_tools, check_wsl2, check_usbipd, check_toolchain,
+    install_wsl2, install_usbipd,
+};
 
 #[cfg(target_os = "linux")]
-pub use linux::{check_vs_build_tools, check_wsl2, check_usbipd, check_toolchain};
+pub use linux::{
+    check_vs_build_tools, check_wsl2, check_usbipd, check_toolchain,
+    install_wsl2, install_usbipd,
+};
 
 #[cfg(target_os = "macos")]
-pub use macos::{check_vs_build_tools, check_wsl2, check_usbipd, check_toolchain};
+pub use macos::{
+    check_vs_build_tools, check_wsl2, check_usbipd, check_toolchain,
+    install_wsl2, install_usbipd,
+};

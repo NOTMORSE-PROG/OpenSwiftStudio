@@ -3,6 +3,7 @@
 // kept clean from M0 so the eventual port is incremental, not a rewrite.
 
 use crate::setup::checks::CheckResult;
+use crate::setup::installs::InstallOutcome;
 
 pub fn check_vs_build_tools() -> CheckResult {
     unsupported()
@@ -20,10 +21,31 @@ pub fn check_toolchain() -> CheckResult {
     unsupported()
 }
 
+pub fn install_wsl2<F>(_on_line: F) -> InstallOutcome
+where
+    F: FnMut(&str),
+{
+    install_unsupported()
+}
+
+pub fn install_usbipd<F>(_on_line: F) -> InstallOutcome
+where
+    F: FnMut(&str),
+{
+    install_unsupported()
+}
+
 fn unsupported() -> CheckResult {
     CheckResult {
         found: false,
         message: Some("Platform not supported in v0.1 (Linux planned for v0.7).".to_string()),
         ..Default::default()
+    }
+}
+
+fn install_unsupported() -> InstallOutcome {
+    InstallOutcome::Failed {
+        exit_code: -1,
+        stderr: "Platform not supported in v0.1 (Linux planned for v0.7).".to_string(),
     }
 }

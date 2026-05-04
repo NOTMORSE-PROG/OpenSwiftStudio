@@ -25,6 +25,8 @@ pub fn run() {
             ipc::setup_check_wsl2,
             ipc::setup_check_usbipd,
             ipc::setup_check_toolchain,
+            ipc::setup_install_wsl2,
+            ipc::setup_install_usbipd,
             ipc::project_open,
             ipc::project_close,
             ipc::run_start,

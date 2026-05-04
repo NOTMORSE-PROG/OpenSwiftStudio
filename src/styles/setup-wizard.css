@@ -249,3 +249,62 @@
   gap: 6px;
   align-items: center;
 }
+
+/* Install controls — appears below a CheckRow when result is "Not detected".
+ * Hosts the Install button, the streaming subprocess log preview, and
+ * outcome alerts (reboot-required / failed). */
+.setup-install {
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--vsc-sidebar-bg);
+  border: 1px solid var(--vsc-border);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setup-install__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.setup-install__hint {
+  color: var(--vsc-fg-secondary);
+  font-size: 12px;
+}
+
+.setup-install__log {
+  margin: 0;
+  padding: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  background: var(--vsc-editor-bg);
+  border: 1px solid var(--vsc-border);
+  border-radius: 3px;
+  font-family: var(--vsc-font-family-mono, monospace);
+  font-size: 11px;
+  color: var(--vsc-fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.setup-install__alert {
+  padding: 8px 10px;
+  border-radius: 3px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.setup-install__alert--reboot {
+  background: #cca70022;
+  color: var(--vsc-warning-fg);
+  border: 1px solid #cca70066;
+}
+
+.setup-install__alert--error {
+  background: #f4877122;
+  color: var(--vsc-error-fg);
+  border: 1px solid #f4877166;
+}

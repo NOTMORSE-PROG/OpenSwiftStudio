@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 
 export type SetupCheckResult = {
@@ -62,3 +63,37 @@ export const checkToolchain = (): Promise<SetupCheckResult> =>
   invoke<SetupCheckResult>("setup_check_toolchain");
 
 export const openExternal = (url: string): Promise<void> => shellOpen(url);
+
+// ---------- Installs ----------
+
+export type InstallOutcome =
+  | { kind: "success"; stdout: string }
+  | { kind: "rebootRequired"; stdout: string }
+  | { kind: "failed"; exitCode: number; stderr: string };
+
+export type InstallId = "wsl2" | "usbipd";
+
+export type InstallProgressPayload = {
+  id: InstallId;
+  line: string;
+};
+
+const INSTALL_PROGRESS_EVENT = "setup-install-progress";
+
+export const installWsl2 = (): Promise<InstallOutcome> =>
+  invoke<InstallOutcome>("setup_install_wsl2");
+
+export const installUsbipd = (): Promise<InstallOutcome> =>
+  invoke<InstallOutcome>("setup_install_usbipd");
+
+/**
+ * Subscribe to streaming install-progress lines. The handler is fired once
+ * per line emitted from the install subprocess (stdout + stderr interleaved).
+ * Returns an unlisten fn; call it from `onCleanup` to detach.
+ */
+export const onInstallProgress = async (
+  handler: (id: InstallId, line: string) => void,
+): Promise<UnlistenFn> =>
+  listen<InstallProgressPayload>(INSTALL_PROGRESS_EVENT, (event) => {
+    handler(event.payload.id, event.payload.line);
+  });
