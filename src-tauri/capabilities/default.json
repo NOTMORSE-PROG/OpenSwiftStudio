@@ -1,10 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capabilities for OpenSwiftStudio's main window. Per ADR-007, no auth-requiring permissions are exposed by default.",
+  "description": "Default capabilities for OpenSwiftStudio's main window. No auth-requiring permissions are exposed by default. Setup-wizard custom commands are reachable via the invoke_handler whitelist in src/lib.rs and don't need ACL entries here.",
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "shell:allow-open"
+    "shell:allow-open",
+    "dialog:allow-open",
+    "dialog:allow-save"
   ]
 }

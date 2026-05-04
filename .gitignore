@@ -48,12 +48,11 @@ desktop.ini
 **/iPhoneOS*.sdk
 **/*Apple*.framework
 
-# AI / OS log artifacts
+# Log artifacts
 *.log
 
 # Internal / local-only — never pushed.
-# Anything that references our development discussions, ADRs, AI_LOG, or
-# project-internal context belongs here.
+# Project-internal notes that should not appear in the published tree.
 AI_LOG/
 README.internal.md
 CLAUDE.md

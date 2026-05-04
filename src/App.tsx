@@ -5,6 +5,7 @@ import EditorArea from "./components/EditorArea";
 import Panel from "./components/Panel";
 import StatusBar from "./components/StatusBar";
 import CommandPalette, { useCommandPaletteShortcut } from "./components/CommandPalette";
+import SetupWizard from "./components/SetupWizard";
 
 const App: Component = () => {
   useCommandPaletteShortcut();
@@ -21,6 +22,7 @@ const App: Component = () => {
       </div>
       <StatusBar />
       <CommandPalette />
+      <SetupWizard />
     </div>
   );
 };

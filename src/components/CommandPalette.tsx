@@ -5,6 +5,13 @@ import {
   setPanelCollapsed, panelCollapsed,
   setActiveView,
 } from "../state/appState";
+import {
+  initialStepStates,
+  setCurrentStep,
+  setSetupWizardOpen,
+  setStepStates,
+} from "../state/setupState";
+import { resetSetup } from "../lib/setupApi";
 
 type Command = {
   id: string;
@@ -31,6 +38,19 @@ const commands = (): Command[] => [
   { id: "project.new",  label: "Project: New (wires up in M1)",  run: () => console.log("M1") },
   { id: "run.start",    label: "Run: Start (wires up in M3)",    run: () => console.log("M3") },
   { id: "debug.start",  label: "Debug: Start (wires up in M5)",  run: () => console.log("M5") },
+  {
+    id: "setup.rerun",
+    label: "Setup: Re-run Setup Wizard...",
+    run: () => {
+      void resetSetup()
+        .catch((err) => console.error("setup_reset failed:", err))
+        .finally(() => {
+          setCurrentStep("welcome");
+          setStepStates(initialStepStates());
+          setSetupWizardOpen(true);
+        });
+    },
+  },
 ];
 
 const fuzzyScore = (query: string, text: string): number => {

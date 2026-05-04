@@ -1,0 +1,251 @@
+/* Setup wizard overlay (M0.5). Sits above the CommandPalette overlay (z-index 1000)
+ * with an opaque backdrop so the IDE chrome behind is fully blocked from interaction
+ * during first-run. Tokens reference the existing --vsc-* palette only. */
+
+.setup-wizard-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1100;
+  pointer-events: auto;
+}
+
+.setup-wizard {
+  width: 720px;
+  max-width: 92vw;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--vsc-editor-bg);
+  color: var(--vsc-fg);
+  border: 1px solid var(--vsc-border);
+  border-radius: 6px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.setup-wizard__header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid var(--vsc-border);
+  background: var(--vsc-sidebar-bg);
+}
+
+.setup-wizard__title {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--vsc-fg);
+}
+
+.setup-wizard__subtitle {
+  margin: 0 0 16px;
+  color: var(--vsc-fg-secondary);
+  font-size: 12px;
+}
+
+.setup-wizard__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.setup-wizard__footer {
+  padding: 12px 24px;
+  border-top: 1px solid var(--vsc-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  background: var(--vsc-sidebar-bg);
+}
+
+.setup-wizard__btn {
+  padding: 6px 14px;
+  background: var(--vsc-button-bg);
+  color: var(--vsc-button-fg);
+  border: 1px solid transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  min-width: 80px;
+}
+
+.setup-wizard__btn:hover:not(:disabled) {
+  background: var(--vsc-button-hover-bg);
+}
+
+.setup-wizard__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.setup-wizard__btn--secondary {
+  background: var(--vsc-button-secondary-bg);
+  color: var(--vsc-button-secondary-fg);
+}
+
+.setup-wizard__btn--secondary:hover:not(:disabled) {
+  background: var(--vsc-button-secondary-hover-bg);
+}
+
+/* Stepper */
+.setup-stepper {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.setup-stepper__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--vsc-fg-secondary);
+  border-radius: 3px;
+}
+
+.setup-stepper__item.is-current {
+  background: var(--vsc-list-active-selection-bg);
+  color: var(--vsc-list-active-selection-fg);
+}
+
+.setup-stepper__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vsc-fg-secondary);
+  display: inline-block;
+}
+
+.setup-stepper__item.is-detected .setup-stepper__dot {
+  background: #4ec9b0;
+}
+
+.setup-stepper__item.is-checking .setup-stepper__dot {
+  background: var(--vsc-info-fg);
+}
+
+.setup-stepper__item.is-missing .setup-stepper__dot {
+  background: var(--vsc-warning-fg);
+}
+
+.setup-stepper__item.is-error .setup-stepper__dot {
+  background: var(--vsc-error-fg);
+}
+
+.setup-stepper__item.is-skipped .setup-stepper__dot {
+  background: var(--vsc-fg-secondary);
+  opacity: 0.5;
+}
+
+.setup-stepper__label {
+  white-space: nowrap;
+}
+
+/* Step body */
+.setup-step__heading {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--vsc-fg);
+}
+
+.setup-step__body {
+  margin: 0 0 16px;
+  color: var(--vsc-fg);
+  line-height: 1.55;
+}
+
+.setup-step__body code {
+  background: var(--vsc-input-bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.setup-step__check-row {
+  display: grid;
+  grid-template-columns: 110px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--vsc-sidebar-bg);
+  border: 1px solid var(--vsc-border);
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.setup-step__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  font-size: 11px;
+  border-radius: 10px;
+  background: var(--vsc-badge-bg);
+  color: var(--vsc-badge-fg);
+  text-align: center;
+  min-width: 90px;
+}
+
+.setup-step__badge.is-detected {
+  background: #2ea14333;
+  color: #4ec9b0;
+}
+
+.setup-step__badge.is-missing {
+  background: #cca70033;
+  color: var(--vsc-warning-fg);
+}
+
+.setup-step__badge.is-error {
+  background: #f4877133;
+  color: var(--vsc-error-fg);
+}
+
+.setup-step__badge.is-checking {
+  background: #007acc33;
+  color: var(--vsc-info-fg);
+}
+
+.setup-step__badge.is-skipped {
+  background: var(--vsc-badge-bg);
+  color: var(--vsc-fg-secondary);
+}
+
+.setup-step__check-content {
+  min-width: 0;
+}
+
+.setup-step__check-label {
+  color: var(--vsc-fg);
+  font-weight: 500;
+}
+
+.setup-step__check-detail {
+  margin-top: 4px;
+  color: var(--vsc-fg-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.setup-step__check-path {
+  font-family: var(--vsc-font-family-mono, monospace);
+  color: var(--vsc-fg-secondary);
+  font-size: 11px;
+}
+
+.setup-step__check-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
