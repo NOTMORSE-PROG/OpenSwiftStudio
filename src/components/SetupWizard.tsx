@@ -22,6 +22,7 @@ import {
 import {
   InstallId,
   InstallOutcome,
+  ProgressPhase,
   SetupCheckResult,
   SetupState,
   StepRecord,
@@ -30,6 +31,7 @@ import {
   checkVsBuildTools,
   checkWsl2,
   getSetupState,
+  installToolchain,
   installUsbipd,
   installWsl2,
   markSetupComplete,
@@ -398,23 +400,55 @@ type InstallControlsProps = {
   run: () => Promise<InstallOutcome>;
   afterSuccess: () => Promise<void> | void;
   rebootMessage?: string;
+  hint?: string;
+  buttonLabel?: string;
+};
+
+type ProgressState = {
+  phase: ProgressPhase;
+  received: number;
+  total: number;
+};
+
+const formatBytes = (n: number): string => {
+  if (n >= 1024 * 1024 * 1024) return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${n} B`;
+};
+
+const phaseLabel = (phase: ProgressPhase): string => {
+  switch (phase) {
+    case "download": return "Downloading";
+    case "verify": return "Verifying SHA256";
+    case "install": return "Installing";
+  }
 };
 
 const InstallControls: Component<InstallControlsProps> = (props) => {
   const [installing, setInstalling] = createSignal(false);
   const [logLines, setLogLines] = createSignal<string[]>([]);
+  const [progress, setProgress] = createSignal<ProgressState | null>(null);
   const [outcome, setOutcome] = createSignal<InstallOutcome | null>(null);
 
   // Subscribe once for the lifetime of this component; filter by `id` so two
-  // parallel-mounted InstallControls don't bleed each other's log lines.
+  // parallel-mounted InstallControls don't bleed each other's events.
   let unlisten: (() => void) | undefined;
   onMount(async () => {
-    unlisten = await onInstallProgress((id, line) => {
-      if (id !== props.id) return;
-      setLogLines((prev) => {
-        const next = [...prev, line];
-        return next.length > 8 ? next.slice(next.length - 8) : next;
-      });
+    unlisten = await onInstallProgress((payload) => {
+      if (payload.id !== props.id) return;
+      if (payload.kind === "line") {
+        setLogLines((prev) => {
+          const next = [...prev, payload.line];
+          return next.length > 8 ? next.slice(next.length - 8) : next;
+        });
+      } else {
+        setProgress({
+          phase: payload.phase,
+          received: payload.received,
+          total: payload.total,
+        });
+      }
     });
   });
   onCleanup(() => unlisten?.());
@@ -422,6 +456,7 @@ const InstallControls: Component<InstallControlsProps> = (props) => {
   const runInstall = async () => {
     setInstalling(true);
     setLogLines([]);
+    setProgress(null);
     setOutcome(null);
     try {
       const result = await props.run();
@@ -440,6 +475,12 @@ const InstallControls: Component<InstallControlsProps> = (props) => {
     }
   };
 
+  const percent = () => {
+    const p = progress();
+    if (!p || p.total === 0) return null;
+    return Math.min(100, Math.round((p.received / p.total) * 100));
+  };
+
   return (
     <div class="setup-install">
       <div class="setup-install__row">
@@ -448,12 +489,31 @@ const InstallControls: Component<InstallControlsProps> = (props) => {
           onClick={runInstall}
           disabled={installing()}
         >
-          {installing() ? "Installing..." : "Install"}
+          {installing() ? "Installing..." : (props.buttonLabel ?? "Install")}
         </button>
         <span class="setup-install__hint">
-          Windows will prompt for administrator permission.
+          {props.hint ?? "Windows will prompt for administrator permission."}
         </span>
       </div>
+      <Show when={progress()}>
+        {(p) => (
+          <div class="setup-install__progress">
+            <div class="setup-install__progress-caption">
+              <span>{phaseLabel(p().phase)}</span>
+              <span>
+                {p().total > 0
+                  ? `${formatBytes(p().received)} / ${formatBytes(p().total)} (${percent()}%)`
+                  : formatBytes(p().received)}
+              </span>
+            </div>
+            <progress
+              class="setup-install__progress-bar"
+              value={p().total > 0 ? p().received : undefined}
+              max={p().total > 0 ? p().total : undefined}
+            />
+          </div>
+        )}
+      </Show>
       <Show when={installing() || logLines().length > 0}>
         <pre class="setup-install__log">
           {logLines().length === 0 ? "Starting installer..." : logLines().join("\n")}
@@ -554,9 +614,9 @@ const ToolchainStep: Component<ToolchainStepProps> = (props) => {
     <section class="setup-step">
       <h2 class="setup-step__heading">Toolchain prerequisites</h2>
       <p class="setup-step__body">
-        Swift on Windows compiles against MSVC, so the wizard checks both. Assisted Swift
-        toolchain download + verify is coming in a follow-up; for now this step just
-        confirms whether you already have a version installed.
+        Swift on Windows compiles against MSVC, so the wizard checks both. The Install
+        button below the Swift row downloads Swift 6.2.4 (about 900 MB), verifies its
+        SHA256, and runs the per-user installer. No administrator permission required.
       </p>
 
       <CheckRow
@@ -576,6 +636,15 @@ const ToolchainStep: Component<ToolchainStepProps> = (props) => {
         installUrl={SWIFT_DOCS_URL}
         installButtonLabel="Get Swift"
       />
+      <Show when={props.swift !== null && !props.swift?.found}>
+        <InstallControls
+          id="toolchain"
+          run={installToolchain}
+          afterSuccess={runSwiftDetect}
+          hint="Per-user install — no admin needed. Downloads ~900 MB, verifies SHA256, then runs the installer."
+          buttonLabel="Install Swift 6.2.4"
+        />
+      </Show>
     </section>
   );
 };

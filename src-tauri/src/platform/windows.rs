@@ -556,23 +556,38 @@ fn parse_swift_version(text: &str) -> Option<String> {
 
 // ---------- Installs ----------
 
+use std::fs::File;
+use std::io::{Read, Write};
+
+use sha2::{Digest, Sha256};
+
 use crate::setup::installs::{
     output_indicates_reboot, run_capture_utf16le, run_streaming, InstallOutcome,
+    ProgressEvent, ProgressPhase,
 };
+
+/// Pinned Swift toolchain. URL and SHA256 are kept together so a rebuild
+/// against a new Swift release is a two-line edit followed by an empirical
+/// re-run of the `verify_swift_download_hash` test.
+const SWIFT_DOWNLOAD_URL: &str =
+    "https://download.swift.org/swift-6.2.4-release/windows10/swift-6.2.4-RELEASE/swift-6.2.4-RELEASE-windows10.exe";
+const SWIFT_EXPECTED_SHA256: &str =
+    "222501d4a0ef6ec3b2f08b3e0055140bb3a5136527542239bb925f979689f4ad";
+const SWIFT_INSTALLER_FILENAME: &str = "swift-6.2.4-RELEASE-windows10.exe";
 
 /// Spawn `wsl --install --no-launch`, capture its UTF-16 LE output, and
 /// classify the result. Windows handles its own UAC prompt — we don't try to
 /// elevate ourselves. `--no-launch` skips auto-starting the new distro, which
 /// would otherwise spawn another elevation prompt from inside our subprocess.
-pub fn install_wsl2<F>(mut on_line: F) -> InstallOutcome
+pub fn install_wsl2<F>(mut on_event: F) -> InstallOutcome
 where
-    F: FnMut(&str),
+    F: FnMut(ProgressEvent),
 {
     let mut cmd = Command::new("wsl.exe");
     cmd.args(["--install", "--no-launch"])
         .creation_flags(CREATE_NO_WINDOW);
 
-    match run_capture_utf16le(&mut cmd, &mut on_line) {
+    match run_capture_utf16le(&mut cmd, &mut on_event) {
         Ok((exit_code, captured)) => {
             if output_indicates_reboot(&captured) {
                 InstallOutcome::RebootRequired { stdout: captured }
@@ -598,9 +613,9 @@ where
 /// The MSI fallback path lands alongside the Swift toolchain download (same
 /// download infrastructure); for now we emit a clear "winget required" error
 /// if winget is absent so the user has an actionable next step.
-pub fn install_usbipd<F>(mut on_line: F) -> InstallOutcome
+pub fn install_usbipd<F>(mut on_event: F) -> InstallOutcome
 where
-    F: FnMut(&str),
+    F: FnMut(ProgressEvent),
 {
     if !winget_present() {
         return InstallOutcome::Failed {
@@ -624,7 +639,7 @@ where
     ])
     .creation_flags(CREATE_NO_WINDOW);
 
-    match run_streaming(&mut cmd, &mut on_line) {
+    match run_streaming(&mut cmd, &mut on_event) {
         Ok((0, captured)) => InstallOutcome::Success { stdout: captured },
         Ok((exit_code, captured)) => {
             // winget exit code 0x8A150011 (-1978335215) = no applicable update found
@@ -654,6 +669,182 @@ fn winget_present() -> bool {
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
+}
+
+/// Download Swift 6.2.4, verify its SHA256 against the pinned value, strip
+/// Mark-of-the-Web (defensive — SmartScreen can block elevated launches of
+/// internet-zone downloads), then run the installer with `/passive`. Per-user
+/// install — no `-Verb RunAs` needed; Windows still shows the installer's own
+/// progress UI thanks to `/passive`.
+pub fn install_toolchain<F>(mut on_event: F) -> InstallOutcome
+where
+    F: FnMut(ProgressEvent),
+{
+    // Resolve download dest under %LOCALAPPDATA%\OpenSwiftStudio\downloads.
+    let downloads_dir = match local_app_data_downloads_dir() {
+        Ok(p) => p,
+        Err(e) => {
+            return InstallOutcome::Failed {
+                exit_code: -1,
+                stderr: format!("Could not resolve downloads dir: {e}"),
+            };
+        }
+    };
+    if let Err(e) = std::fs::create_dir_all(&downloads_dir) {
+        return InstallOutcome::Failed {
+            exit_code: -1,
+            stderr: format!("Could not create {}: {e}", downloads_dir.display()),
+        };
+    }
+    let dest = downloads_dir.join(SWIFT_INSTALLER_FILENAME);
+
+    // Phase 1: download
+    on_event(ProgressEvent::Progress {
+        phase: ProgressPhase::Download,
+        received: 0,
+        total: 0,
+    });
+    let computed_hash = match download_with_progress(SWIFT_DOWNLOAD_URL, &dest, &mut on_event) {
+        Ok(hex) => hex,
+        Err(e) => {
+            return InstallOutcome::Failed {
+                exit_code: -1,
+                stderr: format!("Download failed: {e}"),
+            };
+        }
+    };
+
+    // Phase 2: verify
+    on_event(ProgressEvent::Progress {
+        phase: ProgressPhase::Verify,
+        received: 0,
+        total: 0,
+    });
+    if !computed_hash.eq_ignore_ascii_case(SWIFT_EXPECTED_SHA256) {
+        return InstallOutcome::Failed {
+            exit_code: -1,
+            stderr: format!(
+                "SHA256 mismatch — expected {SWIFT_EXPECTED_SHA256}, got {computed_hash}. \
+                 The downloaded file at {} may be corrupt or tampered. Delete it and try again.",
+                dest.display()
+            ),
+        };
+    }
+
+    // Phase 3: strip MotW (defensive; reqwest doesn't add it but AVs sometimes do).
+    strip_mark_of_the_web(&dest);
+
+    // Phase 4: install
+    on_event(ProgressEvent::Progress {
+        phase: ProgressPhase::Install,
+        received: 0,
+        total: 0,
+    });
+    let mut cmd = Command::new(&dest);
+    cmd.arg("/passive").creation_flags(CREATE_NO_WINDOW);
+    let outcome = match run_streaming(&mut cmd, &mut on_event) {
+        Ok((0, captured)) => InstallOutcome::Success { stdout: captured },
+        Ok((exit_code, captured)) => InstallOutcome::Failed {
+            exit_code,
+            stderr: captured,
+        },
+        Err(e) => InstallOutcome::Failed {
+            exit_code: -1,
+            stderr: format!("Could not invoke installer: {e}"),
+        },
+    };
+
+    // Cleanup on success — saves ~900 MB. Leave the file on failure so the
+    // user can retry without re-downloading.
+    if matches!(outcome, InstallOutcome::Success { .. }) {
+        let _ = std::fs::remove_file(&dest);
+    }
+
+    outcome
+}
+
+fn local_app_data_downloads_dir() -> std::io::Result<PathBuf> {
+    let mut p = dirs::data_local_dir().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "LOCALAPPDATA not resolved")
+    })?;
+    p.push("OpenSwiftStudio");
+    p.push("downloads");
+    Ok(p)
+}
+
+/// Stream the response body to disk while computing SHA256 in the same pass,
+/// emitting `Progress` events about every 512 KiB so the wizard's progress bar
+/// updates roughly twice per second on a 1 MB/s link. Returns the SHA256 hex
+/// of the bytes written. Caller is responsible for comparing against an
+/// expected hash and for cleanup on failure.
+pub(crate) fn download_with_progress<F>(
+    url: &str,
+    dest: &Path,
+    on_event: &mut F,
+) -> Result<String, Box<dyn std::error::Error>>
+where
+    F: FnMut(ProgressEvent),
+{
+    let client = reqwest::blocking::Client::builder()
+        .user_agent(concat!("OpenSwiftStudio/", env!("CARGO_PKG_VERSION")))
+        .build()?;
+    let mut response = client.get(url).send()?.error_for_status()?;
+    let total = response.content_length().unwrap_or(0);
+
+    let mut file = File::create(dest)?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 64 * 1024];
+    let mut received: u64 = 0;
+    let mut bytes_since_emit: u64 = 0;
+    const EMIT_EVERY: u64 = 512 * 1024;
+
+    loop {
+        let n = response.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        file.write_all(&buf[..n])?;
+        hasher.update(&buf[..n]);
+        received += n as u64;
+        bytes_since_emit += n as u64;
+        if bytes_since_emit >= EMIT_EVERY {
+            on_event(ProgressEvent::Progress {
+                phase: ProgressPhase::Download,
+                received,
+                total,
+            });
+            bytes_since_emit = 0;
+        }
+    }
+    file.sync_all()?;
+    // Final progress event so the UI shows 100% even if the last chunk was
+    // smaller than the emit threshold.
+    on_event(ProgressEvent::Progress {
+        phase: ProgressPhase::Download,
+        received,
+        total: if total == 0 { received } else { total },
+    });
+
+    let digest = hasher.finalize();
+    Ok(hex_lower(&digest))
+}
+
+fn hex_lower(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        s.push_str(&format!("{b:02x}"));
+    }
+    s
+}
+
+/// Best-effort removal of the `Zone.Identifier` NTFS alternate data stream that
+/// Windows attaches to internet-zone downloads. SmartScreen consults this stream
+/// when an elevated launch happens; if it's present, the launch can fail
+/// silently. reqwest doesn't add this stream itself, but AV / endpoint-protection
+/// software sometimes does.
+pub(crate) fn strip_mark_of_the_web(path: &Path) {
+    let ads_path = format!("{}:Zone.Identifier", path.display());
+    let _ = std::fs::remove_file(ads_path);
 }
 
 // ---------- Shared helpers ----------
@@ -745,6 +936,45 @@ mod tests {
     fn parse_swift_version_handles_missing() {
         assert_eq!(parse_swift_version(""), None);
         assert_eq!(parse_swift_version("not swift output"), None);
+    }
+
+    /// Empirical verification that `download_with_progress` streams the real
+    /// Swift 6.2.4 installer cleanly, computes a SHA256 matching the pinned
+    /// constant, and emits Progress events along the way. `#[ignore]`-gated
+    /// because it downloads ~900 MB; run explicitly with
+    /// `cargo test -- --ignored verify_swift_download_hash` whenever the
+    /// pinned URL or hash changes.
+    #[test]
+    #[ignore = "downloads ~900 MB; opt-in via --ignored"]
+    fn verify_swift_download_hash() {
+        let tmp = std::env::temp_dir().join("oss-test-swift-6.2.4.exe");
+        // Clean any prior run.
+        let _ = std::fs::remove_file(&tmp);
+
+        let mut progress_events = 0u32;
+        let mut last_received: u64 = 0;
+        let mut last_total: u64 = 0;
+        let mut on_event = |e: ProgressEvent| {
+            if let ProgressEvent::Progress { received, total, .. } = e {
+                progress_events += 1;
+                last_received = received;
+                last_total = total;
+            }
+        };
+
+        let hash = download_with_progress(SWIFT_DOWNLOAD_URL, &tmp, &mut on_event)
+            .expect("download should succeed");
+
+        assert!(
+            hash.eq_ignore_ascii_case(SWIFT_EXPECTED_SHA256),
+            "SHA256 mismatch: expected {SWIFT_EXPECTED_SHA256}, got {hash}"
+        );
+        assert!(progress_events > 10, "expected many progress events, got {progress_events}");
+        assert_eq!(last_received, last_total, "final progress should report 100%");
+        assert!(last_total > 100_000_000, "Swift installer should be > 100 MB, got {last_total}");
+
+        // Cleanup.
+        let _ = std::fs::remove_file(&tmp);
     }
 
     #[test]

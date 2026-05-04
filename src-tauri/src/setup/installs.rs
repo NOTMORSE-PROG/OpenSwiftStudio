@@ -1,7 +1,7 @@
 // Cross-platform install dispatch for setup-wizard prerequisites. Bodies
-// live in `crate::platform::<os>`. Bodies are blocking subprocess waits;
-// the IPC layer wraps them in async tasks so the long-running installer
-// doesn't block Tauri's IPC thread.
+// live in `crate::platform::<os>`. Bodies are blocking subprocess waits +
+// HTTP downloads; the IPC layer wraps them in async tasks so the long-running
+// installer doesn't block Tauri's IPC thread.
 
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
@@ -28,31 +28,70 @@ pub enum InstallOutcome {
     },
 }
 
-pub fn install_wsl2<F>(on_line: F) -> InstallOutcome
-where
-    F: FnMut(&str),
-{
-    crate::platform::install_wsl2(on_line)
+/// Phase of an install that streams progress. Currently used by the toolchain
+/// install (download → verify → install). WSL2 + usbipd installs only emit
+/// `ProgressEvent::Line` since their subprocess output is the progress signal.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProgressPhase {
+    Download,
+    Verify,
+    Install,
 }
 
-pub fn install_usbipd<F>(on_line: F) -> InstallOutcome
+/// Per-line / per-chunk update streamed from an install in progress. The IPC
+/// layer maps each event to a `setup-install-progress` Tauri event so the
+/// wizard can render a live preview (log lines + a progress bar).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum ProgressEvent {
+    /// A subprocess output line (stdout or stderr).
+    Line {
+        line: String,
+    },
+    /// A bytes-received update for a phase that has known total size. `total = 0`
+    /// is allowed when the server omits Content-Length; the UI shows an
+    /// indeterminate state in that case.
+    Progress {
+        phase: ProgressPhase,
+        received: u64,
+        total: u64,
+    },
+}
+
+pub fn install_wsl2<F>(on_event: F) -> InstallOutcome
 where
-    F: FnMut(&str),
+    F: FnMut(ProgressEvent),
 {
-    crate::platform::install_usbipd(on_line)
+    crate::platform::install_wsl2(on_event)
+}
+
+pub fn install_usbipd<F>(on_event: F) -> InstallOutcome
+where
+    F: FnMut(ProgressEvent),
+{
+    crate::platform::install_usbipd(on_event)
+}
+
+pub fn install_toolchain<F>(on_event: F) -> InstallOutcome
+where
+    F: FnMut(ProgressEvent),
+{
+    crate::platform::install_toolchain(on_event)
 }
 
 /// Buffer a subprocess's full stdout/stderr, decode as UTF-16 LE (with optional
-/// BOM), then emit lines via `on_line` and return `(exit_code, captured_tail)`.
-/// Used for wsl.exe, which always emits UTF-16 LE on Windows. Loses real-time
-/// streaming, but install commands are short enough (~10–60 s) that the user
-/// sees the whole log when the install finishes — acceptable for v0.1.
+/// BOM), then emit lines via `on_event` (as `ProgressEvent::Line`) and return
+/// `(exit_code, captured_tail)`. Used for wsl.exe, which always emits UTF-16 LE
+/// on Windows. Loses real-time streaming, but install commands are short
+/// enough (~10–60 s) that the user sees the whole log when the install
+/// finishes — acceptable for v0.1.
 pub fn run_capture_utf16le<F>(
     cmd: &mut Command,
-    mut on_line: F,
+    mut on_event: F,
 ) -> std::io::Result<(i32, String)>
 where
-    F: FnMut(&str),
+    F: FnMut(ProgressEvent),
 {
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     let output = cmd.spawn()?.wait_with_output()?;
@@ -71,7 +110,7 @@ where
 
     for line in decoded.lines() {
         if !line.is_empty() {
-            on_line(line);
+            on_event(ProgressEvent::Line { line: line.to_string() });
         }
     }
 
@@ -102,14 +141,14 @@ pub fn output_indicates_reboot(text: &str) -> bool {
     lower.contains("reboot") || lower.contains("restart")
 }
 
-/// Spawn a subprocess, pipe stdout+stderr line-by-line to `on_line` (so the
-/// frontend can stream a live log preview), and collect a tail of the lines
-/// for diagnostics on completion. Returns `(exit_code, captured_tail)`. Tail
-/// is capped at the last 4 KiB of bytes so a noisy installer can't blow up
-/// the InstallOutcome's serialization size.
-pub fn run_streaming<F>(cmd: &mut Command, mut on_line: F) -> std::io::Result<(i32, String)>
+/// Spawn a subprocess, pipe stdout+stderr line-by-line as `ProgressEvent::Line`
+/// events (so the frontend can stream a live log preview), and collect a tail
+/// of the lines for diagnostics on completion. Returns `(exit_code,
+/// captured_tail)`. Tail is capped at the last 4 KiB of bytes so a noisy
+/// installer can't blow up the InstallOutcome's serialization size.
+pub fn run_streaming<F>(cmd: &mut Command, mut on_event: F) -> std::io::Result<(i32, String)>
 where
-    F: FnMut(&str),
+    F: FnMut(ProgressEvent),
 {
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd.spawn()?;
@@ -122,7 +161,7 @@ where
     const TAIL_BUDGET_BYTES: usize = 4096;
 
     let mut emit = |line: &str| {
-        on_line(line);
+        on_event(ProgressEvent::Line { line: line.to_string() });
         if !tail.is_empty() {
             tail.push('\n');
         }
@@ -210,6 +249,41 @@ mod tests {
     fn trim_tail_returns_input_when_under_budget() {
         assert_eq!(trim_tail("short"), "short");
         assert_eq!(trim_tail(""), "");
+    }
+
+    #[test]
+    fn progress_event_line_round_trips_via_serde() {
+        let original = ProgressEvent::Line { line: "Downloading...".to_string() };
+        let json = serde_json::to_string(&original).expect("serialize");
+        assert!(json.contains("\"kind\":\"line\""));
+        assert!(json.contains("\"line\":\"Downloading...\""));
+        let parsed: ProgressEvent = serde_json::from_str(&json).expect("deserialize");
+        match parsed {
+            ProgressEvent::Line { line } => assert_eq!(line, "Downloading..."),
+            other => panic!("expected Line, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn progress_event_progress_round_trips_with_phase_and_bytes() {
+        let original = ProgressEvent::Progress {
+            phase: ProgressPhase::Download,
+            received: 12_345_678,
+            total: 899_032_040,
+        };
+        let json = serde_json::to_string(&original).expect("serialize");
+        assert!(json.contains("\"kind\":\"progress\""));
+        assert!(json.contains("\"phase\":\"download\""));
+        assert!(json.contains("\"received\":12345678"));
+        assert!(json.contains("\"total\":899032040"));
+        let parsed: ProgressEvent = serde_json::from_str(&json).expect("deserialize");
+        match parsed {
+            ProgressEvent::Progress { received, total, .. } => {
+                assert_eq!(received, 12_345_678);
+                assert_eq!(total, 899_032_040);
+            }
+            other => panic!("expected Progress, got {other:?}"),
+        }
     }
 
     #[test]

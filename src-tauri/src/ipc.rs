@@ -13,7 +13,7 @@ use serde_json::Value;
 use tauri::Emitter;
 
 use crate::setup::checks::{self, CheckResult};
-use crate::setup::installs::{self, InstallOutcome};
+use crate::setup::installs::{self, InstallOutcome, ProgressEvent, ProgressPhase};
 use crate::setup::state::{self, SetupState};
 
 const INSTALL_PROGRESS_EVENT: &str = "setup-install-progress";
@@ -70,17 +70,47 @@ pub fn setup_check_toolchain() -> CheckResult {
     checks::check_toolchain()
 }
 
-// ---------- Setup wizard installs (M0.5-3, M0.5-4) ----------
+// ---------- Setup wizard installs (M0.5-3, M0.5-4, M0.5-5) ----------
 //
-// Async because the underlying subprocess can take 10–60 s. Each emits a
-// `setup-install-progress` event per output line so the wizard can render a
-// live log preview while the install runs. The payload is `{ id, line }`
-// where `id` distinguishes which install the line belongs to.
+// Async because the underlying subprocess + download can take 10 s – several
+// minutes (Swift toolchain is ~900 MB). Each emits a `setup-install-progress`
+// event per ProgressEvent so the wizard can render both a live log preview
+// and a download progress bar.
+//
+// Wire format is a tagged union that mirrors the Rust ProgressEvent: lines
+// arrive as `{ id, kind: "line", line }`; download/verify/install progress
+// arrives as `{ id, kind: "progress", phase, received, total }`.
 
 #[derive(serde::Serialize, Clone)]
-struct InstallProgressPayload<'a> {
-    id: &'a str,
-    line: &'a str,
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+enum InstallProgressBody {
+    Line {
+        line: String,
+    },
+    Progress {
+        phase: ProgressPhase,
+        received: u64,
+        total: u64,
+    },
+}
+
+#[derive(serde::Serialize, Clone)]
+struct InstallProgressPayload {
+    id: &'static str,
+    #[serde(flatten)]
+    body: InstallProgressBody,
+}
+
+fn payload_for(id: &'static str, event: ProgressEvent) -> InstallProgressPayload {
+    let body = match event {
+        ProgressEvent::Line { line } => InstallProgressBody::Line { line },
+        ProgressEvent::Progress {
+            phase,
+            received,
+            total,
+        } => InstallProgressBody::Progress { phase, received, total },
+    };
+    InstallProgressPayload { id, body }
 }
 
 #[tauri::command]
@@ -90,11 +120,8 @@ pub async fn setup_install_wsl2(window: tauri::Window) -> Result<InstallOutcome,
     // window handle (which is cheaply cloneable).
     let win = window.clone();
     let outcome = tauri::async_runtime::spawn_blocking(move || {
-        installs::install_wsl2(|line| {
-            let _ = win.emit(
-                INSTALL_PROGRESS_EVENT,
-                InstallProgressPayload { id: "wsl2", line },
-            );
+        installs::install_wsl2(|event| {
+            let _ = win.emit(INSTALL_PROGRESS_EVENT, payload_for("wsl2", event));
         })
     })
     .await
@@ -106,11 +133,21 @@ pub async fn setup_install_wsl2(window: tauri::Window) -> Result<InstallOutcome,
 pub async fn setup_install_usbipd(window: tauri::Window) -> Result<InstallOutcome, String> {
     let win = window.clone();
     let outcome = tauri::async_runtime::spawn_blocking(move || {
-        installs::install_usbipd(|line| {
-            let _ = win.emit(
-                INSTALL_PROGRESS_EVENT,
-                InstallProgressPayload { id: "usbipd", line },
-            );
+        installs::install_usbipd(|event| {
+            let _ = win.emit(INSTALL_PROGRESS_EVENT, payload_for("usbipd", event));
+        })
+    })
+    .await
+    .map_err(|e| format!("install task panicked: {e}"))?;
+    Ok(outcome)
+}
+
+#[tauri::command]
+pub async fn setup_install_toolchain(window: tauri::Window) -> Result<InstallOutcome, String> {
+    let win = window.clone();
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        installs::install_toolchain(|event| {
+            let _ = win.emit(INSTALL_PROGRESS_EVENT, payload_for("toolchain", event));
         })
     })
     .await

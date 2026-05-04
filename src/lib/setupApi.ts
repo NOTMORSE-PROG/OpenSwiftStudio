@@ -71,12 +71,19 @@ export type InstallOutcome =
   | { kind: "rebootRequired"; stdout: string }
   | { kind: "failed"; exitCode: number; stderr: string };
 
-export type InstallId = "wsl2" | "usbipd";
+export type InstallId = "wsl2" | "usbipd" | "toolchain";
 
-export type InstallProgressPayload = {
-  id: InstallId;
-  line: string;
-};
+export type ProgressPhase = "download" | "verify" | "install";
+
+export type InstallProgressPayload =
+  | { id: InstallId; kind: "line"; line: string }
+  | {
+      id: InstallId;
+      kind: "progress";
+      phase: ProgressPhase;
+      received: number;
+      total: number;
+    };
 
 const INSTALL_PROGRESS_EVENT = "setup-install-progress";
 
@@ -86,14 +93,17 @@ export const installWsl2 = (): Promise<InstallOutcome> =>
 export const installUsbipd = (): Promise<InstallOutcome> =>
   invoke<InstallOutcome>("setup_install_usbipd");
 
+export const installToolchain = (): Promise<InstallOutcome> =>
+  invoke<InstallOutcome>("setup_install_toolchain");
+
 /**
- * Subscribe to streaming install-progress lines. The handler is fired once
- * per line emitted from the install subprocess (stdout + stderr interleaved).
+ * Subscribe to streaming install-progress events. The handler fires for every
+ * subprocess line and every progress chunk; consumers narrow on `payload.kind`.
  * Returns an unlisten fn; call it from `onCleanup` to detach.
  */
 export const onInstallProgress = async (
-  handler: (id: InstallId, line: string) => void,
+  handler: (payload: InstallProgressPayload) => void,
 ): Promise<UnlistenFn> =>
   listen<InstallProgressPayload>(INSTALL_PROGRESS_EVENT, (event) => {
-    handler(event.payload.id, event.payload.line);
+    handler(event.payload);
   });
