@@ -13,6 +13,7 @@
       "allow": [
         { "url": "https://download.swift.org/**" },
         { "url": "https://github.com/dorssel/usbipd-win/releases/**" },
+        { "url": "https://github.com/xtool-org/xtool/releases/**" },
         { "url": "https://developer.apple.com/**" }
       ]
     }

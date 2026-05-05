@@ -349,3 +349,64 @@
   background: var(--vsc-button-bg);
   border-radius: 3px;
 }
+
+/* Apple ID step credential UI — rendered but currently disabled. A follow-up
+ * wires the Apple ID auth + XIP drop-zone + xtool setup invocation. */
+.setup-step__form-row {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--vsc-sidebar-bg);
+  border: 1px dashed var(--vsc-border);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  opacity: 0.6;
+}
+
+.setup-step__form-row-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.setup-step__form-row-title {
+  color: var(--vsc-fg);
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.setup-step__form-row-pending {
+  color: var(--vsc-fg-secondary);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.setup-step__input {
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--vsc-input-bg);
+  color: var(--vsc-input-fg);
+  border: 1px solid var(--vsc-input-border);
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.setup-step__input:disabled {
+  cursor: not-allowed;
+}
+
+.setup-step__dropzone {
+  padding: 20px 12px;
+  background: var(--vsc-editor-bg);
+  border: 1px dashed var(--vsc-border);
+  border-radius: 3px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--vsc-fg-secondary);
+}
+
+.setup-step__dropzone--disabled {
+  cursor: not-allowed;
+}

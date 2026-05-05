@@ -30,10 +30,12 @@ import {
   checkUsbipd,
   checkVsBuildTools,
   checkWsl2,
+  checkXtool,
   getSetupState,
   installToolchain,
   installUsbipd,
   installWsl2,
+  installXtool,
   markSetupComplete,
   onInstallProgress,
   openExternal,
@@ -57,6 +59,7 @@ const SetupWizard: Component = () => {
   const [wsl2Result, setWsl2Result] = createSignal<SetupCheckResult | null>(null);
   const [usbipdResult, setUsbipdResult] = createSignal<SetupCheckResult | null>(null);
   const [swiftResult, setSwiftResult] = createSignal<SetupCheckResult | null>(null);
+  const [xtoolResult, setXtoolResult] = createSignal<SetupCheckResult | null>(null);
 
   const detectionToRecord = (r: SetupCheckResult | null, now: string) =>
     r
@@ -121,6 +124,7 @@ const SetupWizard: Component = () => {
       wsl2Detected: detectionToRecord(wsl2Result(), now),
       usbipdDetected: detectionToRecord(usbipdResult(), now),
       swiftDetected: detectionToRecord(swiftResult(), now),
+      xtoolDetected: detectionToRecord(xtoolResult(), now),
     };
     try {
       await markSetupComplete(next);
@@ -181,7 +185,10 @@ const SetupWizard: Component = () => {
                 />
               </Match>
               <Match when={currentStep() === "apple-id"}>
-                <AppleIdStubStep />
+                <AppleIdStep
+                  xtool={xtoolResult()}
+                  onXtoolResult={(r) => setXtoolResult(r)}
+                />
               </Match>
               <Match when={currentStep() === "done"}>
                 <DoneStep />
@@ -649,22 +656,103 @@ const ToolchainStep: Component<ToolchainStepProps> = (props) => {
   );
 };
 
-const AppleIdStubStep: Component = () => (
-  <section class="setup-step">
-    <h2 class="setup-step__heading">Apple ID</h2>
-    <p class="setup-step__body">
-      A follow-up step will collect your free Apple ID and let you drop in the Xcode .xip
-      you download from <em>developer.apple.com</em>. We never re-host the .xip (clean-room
-      rules); you fetch it under your own account.
-    </p>
-    <div class="setup-step__check-row">
-      <span class="setup-step__badge is-skipped">Skipped (stub)</span>
-      <span class="setup-step__check-label">
-        Apple ID + Xcode .xip flow lands in a follow-up.
-      </span>
-    </div>
-  </section>
-);
+const APPLE_DEVELOPER_URL = "https://developer.apple.com/download/applications/";
+
+type AppleIdStepProps = {
+  xtool: SetupCheckResult | null;
+  onXtoolResult: (r: SetupCheckResult) => void;
+};
+
+const AppleIdStep: Component<AppleIdStepProps> = (props) => {
+  const [busy, setBusy] = createSignal(false);
+
+  const runXtoolDetect = async () => {
+    setBusy(true);
+    updateStep("apple-id", { status: "checking", message: "" });
+    try {
+      const result = await checkXtool();
+      props.onXtoolResult(result);
+      updateStep("apple-id", {
+        status: result.found ? "detected" : "missing",
+        message: result.found
+          ? `${result.displayName ?? "xtool"}${result.version ? ` ${result.version}` : ""}`
+          : result.message ?? "xtool not detected.",
+      });
+    } catch (err) {
+      updateStep("apple-id", {
+        status: "error",
+        message: `xtool detection failed: ${String(err)}`,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section class="setup-step">
+      <h2 class="setup-step__heading">Apple ID + Xcode SDK</h2>
+      <p class="setup-step__body">
+        xtool runs inside WSL2 and uses your free Apple ID for device signing. You
+        provide the Apple ID and an Xcode <code>.xip</code> downloaded under your own
+        account — we never re-host Xcode (clean-room rules).
+      </p>
+      <p class="setup-step__body">
+        <button
+          class="setup-wizard__btn setup-wizard__btn--secondary"
+          onClick={() => void openExternal(APPLE_DEVELOPER_URL)}
+        >
+          Open developer.apple.com
+        </button>
+        <span class="setup-install__hint" style="margin-left: 12px;">
+          Sign in with a free Apple ID, then download the latest Xcode .xip.
+        </span>
+      </p>
+
+      <CheckRow
+        result={props.xtool}
+        busy={busy()}
+        label="xtool (Apple ID signing CLI, runs in WSL2)"
+        onDetect={runXtoolDetect}
+        installUrl="https://github.com/xtool-org/xtool/releases/latest"
+        installButtonLabel="Get xtool"
+      />
+      <Show when={props.xtool !== null && !props.xtool?.found}>
+        <InstallControls
+          id="xtool"
+          run={installXtool}
+          afterSuccess={runXtoolDetect}
+          hint="Per-user install into WSL2's ~/.local/bin/xtool — no admin needed. Downloads ~52 MB, verifies SHA256."
+          buttonLabel="Install xtool 1.16.1"
+        />
+      </Show>
+
+      <div class="setup-step__form-row">
+        <div class="setup-step__form-row-header">
+          <span class="setup-step__form-row-title">Apple ID + Xcode .xip</span>
+          <span class="setup-step__form-row-pending">(wires up in a follow-up)</span>
+        </div>
+        <input
+          class="setup-step__input"
+          type="email"
+          placeholder="apple-id@example.com"
+          disabled
+        />
+        <input
+          class="setup-step__input"
+          type="password"
+          placeholder="App-specific password"
+          disabled
+        />
+        <div class="setup-step__dropzone setup-step__dropzone--disabled">
+          Drop your Xcode .xip here — flow lands in a follow-up.
+        </div>
+        <button class="setup-wizard__btn" disabled>
+          Run xtool setup
+        </button>
+      </div>
+    </section>
+  );
+};
 
 const DoneStep: Component = () => (
   <section class="setup-step">

@@ -80,6 +80,13 @@ where
     crate::platform::install_toolchain(on_event)
 }
 
+pub fn install_xtool<F>(on_event: F) -> InstallOutcome
+where
+    F: FnMut(ProgressEvent),
+{
+    crate::platform::install_xtool(on_event)
+}
+
 /// Buffer a subprocess's full stdout/stderr, decode as UTF-16 LE (with optional
 /// BOM), then emit lines via `on_event` (as `ProgressEvent::Line`) and return
 /// `(exit_code, captured_tail)`. Used for wsl.exe, which always emits UTF-16 LE

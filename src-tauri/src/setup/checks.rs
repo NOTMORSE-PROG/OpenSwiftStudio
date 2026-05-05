@@ -31,3 +31,7 @@ pub fn check_usbipd() -> CheckResult {
 pub fn check_toolchain() -> CheckResult {
     crate::platform::check_toolchain()
 }
+
+pub fn check_xtool() -> CheckResult {
+    crate::platform::check_xtool()
+}

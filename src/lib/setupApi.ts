@@ -30,6 +30,7 @@ export type VsBuildToolsRecord = DetectionRecord;
 export type Wsl2Record = DetectionRecord;
 export type UsbipdRecord = DetectionRecord;
 export type SwiftRecord = DetectionRecord;
+export type XtoolRecord = DetectionRecord;
 
 export type SetupState = {
   schemaVersion: number;
@@ -40,6 +41,7 @@ export type SetupState = {
   wsl2Detected?: Wsl2Record;
   usbipdDetected?: UsbipdRecord;
   swiftDetected?: SwiftRecord;
+  xtoolDetected?: XtoolRecord;
 };
 
 export const getSetupState = (): Promise<SetupState | null> =>
@@ -62,6 +64,9 @@ export const checkUsbipd = (): Promise<SetupCheckResult> =>
 export const checkToolchain = (): Promise<SetupCheckResult> =>
   invoke<SetupCheckResult>("setup_check_toolchain");
 
+export const checkXtool = (): Promise<SetupCheckResult> =>
+  invoke<SetupCheckResult>("setup_check_xtool");
+
 export const openExternal = (url: string): Promise<void> => shellOpen(url);
 
 // ---------- Installs ----------
@@ -71,7 +76,7 @@ export type InstallOutcome =
   | { kind: "rebootRequired"; stdout: string }
   | { kind: "failed"; exitCode: number; stderr: string };
 
-export type InstallId = "wsl2" | "usbipd" | "toolchain";
+export type InstallId = "wsl2" | "usbipd" | "toolchain" | "xtool";
 
 export type ProgressPhase = "download" | "verify" | "install";
 
@@ -95,6 +100,9 @@ export const installUsbipd = (): Promise<InstallOutcome> =>
 
 export const installToolchain = (): Promise<InstallOutcome> =>
   invoke<InstallOutcome>("setup_install_toolchain");
+
+export const installXtool = (): Promise<InstallOutcome> =>
+  invoke<InstallOutcome>("setup_install_xtool");
 
 /**
  * Subscribe to streaming install-progress events. The handler fires for every

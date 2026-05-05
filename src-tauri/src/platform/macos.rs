@@ -21,6 +21,10 @@ pub fn check_toolchain() -> CheckResult {
     unsupported()
 }
 
+pub fn check_xtool() -> CheckResult {
+    unsupported()
+}
+
 pub fn install_wsl2<F>(_on_event: F) -> InstallOutcome
 where
     F: FnMut(ProgressEvent),
@@ -36,6 +40,13 @@ where
 }
 
 pub fn install_toolchain<F>(_on_event: F) -> InstallOutcome
+where
+    F: FnMut(ProgressEvent),
+{
+    install_unsupported()
+}
+
+pub fn install_xtool<F>(_on_event: F) -> InstallOutcome
 where
     F: FnMut(ProgressEvent),
 {

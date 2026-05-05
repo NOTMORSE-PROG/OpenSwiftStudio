@@ -554,6 +554,133 @@ fn parse_swift_version(text: &str) -> Option<String> {
     }
 }
 
+// ---------- xtool ----------
+//
+// xtool is a Linux AppImage that runs inside WSL. We probe + invoke it via
+// `wsl -d <distro> <command>` against a chosen "user distro" rather than the
+// `wsl` default — on hosts with Docker Desktop installed, the default distro
+// is `docker-desktop` (a minimal Alpine env without bash) and isn't suitable
+// for hosting xtool. Install location is `~/.local/bin/xtool` inside that
+// chosen distro (per-user, no sudo).
+
+const XTOOL_INSTALL_URL: &str =
+    "https://github.com/xtool-org/xtool/releases/latest";
+
+/// Distros that must be skipped — Docker Desktop's WSL integration distros
+/// are minimal Alpine-based environments meant only for the Docker daemon.
+const WSL_DISTRO_BLOCKLIST: &[&str] = &["docker-desktop", "docker-desktop-data"];
+
+/// Pick the first installed WSL distro that isn't on the blocklist. Returns
+/// `None` if WSL is absent OR if the only installed distros are Docker
+/// Desktop's helpers. The wizard surfaces that as an actionable
+/// "install Ubuntu first" message.
+fn wsl_user_distro() -> Option<String> {
+    let output = Command::new("wsl.exe")
+        .args(["-l", "-q"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = decode_utf16le_lossy(&output.stdout);
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .find(|line| !WSL_DISTRO_BLOCKLIST.contains(line))
+        .map(|s| s.to_string())
+}
+
+pub fn check_xtool() -> CheckResult {
+    let Some(distro) = wsl_user_distro() else {
+        return not_detected(
+            "No suitable WSL distro found (only Docker Desktop's helpers don't count). \
+             Install Ubuntu first via the WSL2 step, then come back to install xtool from",
+            XTOOL_INSTALL_URL,
+        );
+    };
+    let Ok(output) = Command::new("wsl.exe")
+        .args(["-d", &distro, "--", "/bin/sh", "-c", "$HOME/.local/bin/xtool --version"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    else {
+        return not_detected(
+            "Could not invoke wsl.exe. Confirm WSL2 is installed, then install xtool from",
+            XTOOL_INSTALL_URL,
+        );
+    };
+    if !output.status.success() {
+        return not_detected(
+            "xtool not installed in the WSL2 distro. The Install button below will download and install it from",
+            XTOOL_INSTALL_URL,
+        );
+    }
+    // wsl.exe sometimes wraps subprocess output in UTF-16 LE, sometimes not
+    // (depends on whether it's the absolute-path form vs the bare command).
+    // Try both decodings; whichever yields a parseable version line wins.
+    let text_utf8 = String::from_utf8_lossy(&output.stdout).to_string();
+    let text_utf16 = decode_utf16le_lossy(&output.stdout);
+    let version = parse_xtool_version(&text_utf8)
+        .or_else(|| parse_xtool_version(&text_utf16))
+        .unwrap_or_else(|| text_utf8.lines().next().unwrap_or("").trim().to_string());
+    CheckResult {
+        found: true,
+        display_name: Some("xtool".to_string()),
+        version: Some(version),
+        install_path: Some("~/.local/bin/xtool".to_string()),
+        message: None,
+    }
+}
+
+/// Extract "1.16.1" from xtool's `--version` output. Typical line:
+/// `xtool 1.16.1` (and possibly extra trailing tokens). Falls back to the
+/// last whitespace-delimited token of the first non-empty line if the
+/// "xtool " prefix isn't found.
+fn parse_xtool_version(text: &str) -> Option<String> {
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("xtool ") {
+            let token = rest.split_whitespace().next()?;
+            if token.chars().any(|c| c.is_ascii_digit()) {
+                return Some(token.to_string());
+            }
+        }
+        // Fallback: last token on the first non-empty line, if it looks numeric.
+        if let Some(token) = line.split_whitespace().last() {
+            if token.chars().any(|c| c.is_ascii_digit())
+                && token.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+            {
+                return Some(token.to_string());
+            }
+        }
+        break;
+    }
+    None
+}
+
+/// Convert a Windows path like `C:\Users\Admin\AppData\Local\OpenSwiftStudio\foo`
+/// to its WSL `/mnt/<drive>/...` equivalent. Lowercases the drive letter and
+/// flips backslashes to forward slashes. Only meaningful for paths on a local
+/// drive that WSL has auto-mounted (the typical case).
+fn windows_path_to_wsl_mnt(p: &Path) -> Option<String> {
+    let s = p.to_string_lossy().to_string();
+    let mut chars = s.chars();
+    let drive = chars.next()?;
+    if !drive.is_ascii_alphabetic() {
+        return None;
+    }
+    if chars.next()? != ':' {
+        return None;
+    }
+    let rest = chars.collect::<String>();
+    let rest = rest.replace('\\', "/");
+    let rest = rest.trim_start_matches('/');
+    Some(format!("/mnt/{}/{}", drive.to_ascii_lowercase(), rest))
+}
+
 // ---------- Installs ----------
 
 use std::fs::File;
@@ -574,6 +701,14 @@ const SWIFT_DOWNLOAD_URL: &str =
 const SWIFT_EXPECTED_SHA256: &str =
     "222501d4a0ef6ec3b2f08b3e0055140bb3a5136527542239bb925f979689f4ad";
 const SWIFT_INSTALLER_FILENAME: &str = "swift-6.2.4-RELEASE-windows10.exe";
+
+/// Pinned xtool AppImage. Bumping the version is a three-line edit followed
+/// by an empirical re-run of `verify_xtool_download_hash`.
+const XTOOL_DOWNLOAD_URL: &str =
+    "https://github.com/xtool-org/xtool/releases/download/1.16.1/xtool-x86_64.AppImage";
+const XTOOL_EXPECTED_SHA256: &str =
+    "56aac91372980d2c37fdeb25cdb7e6f82d95dea439d5a6a66b974da4804d2d09";
+const XTOOL_INSTALLER_FILENAME: &str = "xtool-x86_64.AppImage";
 
 /// Spawn `wsl --install --no-launch`, capture its UTF-16 LE output, and
 /// classify the result. Windows handles its own UAC prompt — we don't try to
@@ -756,6 +891,153 @@ where
 
     // Cleanup on success — saves ~900 MB. Leave the file on failure so the
     // user can retry without re-downloading.
+    if matches!(outcome, InstallOutcome::Success { .. }) {
+        let _ = std::fs::remove_file(&dest);
+    }
+
+    outcome
+}
+
+/// Download xtool's x86_64 AppImage to the Windows-side downloads dir, verify
+/// its SHA256 against the pinned value, then copy it into the WSL default
+/// distro at `~/.local/bin/xtool` (per-user; no sudo). Verifies via
+/// `wsl ~/.local/bin/xtool --version`. Cleans up the Windows-side AppImage on
+/// success.
+pub fn install_xtool<F>(mut on_event: F) -> InstallOutcome
+where
+    F: FnMut(ProgressEvent),
+{
+    let downloads_dir = match local_app_data_downloads_dir() {
+        Ok(p) => p,
+        Err(e) => {
+            return InstallOutcome::Failed {
+                exit_code: -1,
+                stderr: format!("Could not resolve downloads dir: {e}"),
+            };
+        }
+    };
+    if let Err(e) = std::fs::create_dir_all(&downloads_dir) {
+        return InstallOutcome::Failed {
+            exit_code: -1,
+            stderr: format!("Could not create {}: {e}", downloads_dir.display()),
+        };
+    }
+    let dest = downloads_dir.join(XTOOL_INSTALLER_FILENAME);
+
+    // Phase 1: download
+    on_event(ProgressEvent::Progress {
+        phase: ProgressPhase::Download,
+        received: 0,
+        total: 0,
+    });
+    let computed_hash = match download_with_progress(XTOOL_DOWNLOAD_URL, &dest, &mut on_event) {
+        Ok(hex) => hex,
+        Err(e) => {
+            return InstallOutcome::Failed {
+                exit_code: -1,
+                stderr: format!("Download failed: {e}"),
+            };
+        }
+    };
+
+    // Phase 2: verify
+    on_event(ProgressEvent::Progress {
+        phase: ProgressPhase::Verify,
+        received: 0,
+        total: 0,
+    });
+    if !computed_hash.eq_ignore_ascii_case(XTOOL_EXPECTED_SHA256) {
+        return InstallOutcome::Failed {
+            exit_code: -1,
+            stderr: format!(
+                "SHA256 mismatch — expected {XTOOL_EXPECTED_SHA256}, got {computed_hash}. \
+                 The downloaded file at {} may be corrupt or tampered. Delete it and try again.",
+                dest.display()
+            ),
+        };
+    }
+    strip_mark_of_the_web(&dest);
+
+    // Phase 3: copy into WSL + chmod +x
+    on_event(ProgressEvent::Progress {
+        phase: ProgressPhase::Install,
+        received: 0,
+        total: 0,
+    });
+    let Some(distro) = wsl_user_distro() else {
+        return InstallOutcome::Failed {
+            exit_code: -1,
+            stderr:
+                "No suitable WSL distro found. Docker Desktop's helper distros don't count — \
+                 install Ubuntu via the WSL2 step (or `wsl --install -d Ubuntu` from a terminal) and try again."
+                    .to_string(),
+        };
+    };
+    let Some(mnt_path) = windows_path_to_wsl_mnt(&dest) else {
+        return InstallOutcome::Failed {
+            exit_code: -1,
+            stderr: format!("Could not map {} to a /mnt/<drive>/ path.", dest.display()),
+        };
+    };
+    // /bin/sh works in every distro; bash isn't guaranteed (e.g. minimal Alpine).
+    let install_script = format!(
+        "mkdir -p $HOME/.local/bin && cp '{mnt_path}' $HOME/.local/bin/xtool && chmod +x $HOME/.local/bin/xtool"
+    );
+    let mut cp_cmd = Command::new("wsl.exe");
+    cp_cmd
+        .args(["-d", &distro, "--", "/bin/sh", "-c", install_script.as_str()])
+        .creation_flags(CREATE_NO_WINDOW);
+    let outcome = match run_capture_utf16le(&mut cp_cmd, &mut on_event) {
+        Ok((0, _captured)) => {
+            // Verify by running xtool --version inside the same distro.
+            let mut verify = Command::new("wsl.exe");
+            verify
+                .args([
+                    "-d",
+                    &distro,
+                    "--",
+                    "/bin/sh",
+                    "-c",
+                    "$HOME/.local/bin/xtool --version",
+                ])
+                .creation_flags(CREATE_NO_WINDOW);
+            match run_capture_utf16le(&mut verify, &mut on_event) {
+                Ok((0, version_out)) => {
+                    let version_out_utf8 =
+                        String::from_utf8_lossy(version_out.as_bytes()).to_string();
+                    let line = parse_xtool_version(&version_out_utf8)
+                        .map(|v| format!("xtool {v}"))
+                        .unwrap_or_else(|| version_out_utf8.lines().next().unwrap_or("").to_string());
+                    InstallOutcome::Success { stdout: line }
+                }
+                Ok((code, captured)) => InstallOutcome::Failed {
+                    exit_code: code,
+                    stderr: format!(
+                        "xtool installed in {distro} but verify failed (exit {code}): {captured}"
+                    ),
+                },
+                Err(e) => InstallOutcome::Failed {
+                    exit_code: -1,
+                    stderr: format!("Could not invoke wsl for verify: {e}"),
+                },
+            }
+        }
+        Ok((exit_code, captured)) => InstallOutcome::Failed {
+            exit_code,
+            stderr: if captured.trim().is_empty() {
+                format!(
+                    "WSL copy/chmod failed in {distro} (exit {exit_code}). Confirm the distro is healthy."
+                )
+            } else {
+                captured
+            },
+        },
+        Err(e) => InstallOutcome::Failed {
+            exit_code: -1,
+            stderr: format!("Could not invoke wsl.exe: {e}"),
+        },
+    };
+
     if matches!(outcome, InstallOutcome::Success { .. }) {
         let _ = std::fs::remove_file(&dest);
     }
@@ -977,12 +1259,92 @@ mod tests {
         let _ = std::fs::remove_file(&tmp);
     }
 
+    /// Empirical verification that the xtool 1.16.1 AppImage's SHA256 still
+    /// matches the pinned constant (and that `download_with_progress` streams
+    /// it correctly). Lighter than the Swift counterpart (~52 MB) so this can
+    /// run more freely. Still `#[ignore]`-gated to avoid hammering GitHub on
+    /// every `cargo test`.
+    #[test]
+    #[ignore = "downloads ~52 MB; opt-in via --ignored"]
+    fn verify_xtool_download_hash() {
+        let tmp = std::env::temp_dir().join("oss-test-xtool-1.16.1.AppImage");
+        let _ = std::fs::remove_file(&tmp);
+
+        let mut progress_events = 0u32;
+        let mut last_received: u64 = 0;
+        let mut last_total: u64 = 0;
+        let mut on_event = |e: ProgressEvent| {
+            if let ProgressEvent::Progress { received, total, .. } = e {
+                progress_events += 1;
+                last_received = received;
+                last_total = total;
+            }
+        };
+
+        let hash = download_with_progress(XTOOL_DOWNLOAD_URL, &tmp, &mut on_event)
+            .expect("download should succeed");
+
+        assert!(
+            hash.eq_ignore_ascii_case(XTOOL_EXPECTED_SHA256),
+            "SHA256 mismatch: expected {XTOOL_EXPECTED_SHA256}, got {hash}"
+        );
+        assert!(progress_events > 0, "expected at least one progress event");
+        assert_eq!(last_received, last_total, "final progress should report 100%");
+        assert!(last_total > 50_000_000, "xtool AppImage should be > 50 MB, got {last_total}");
+
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn parse_xtool_version_extracts_release_triple() {
+        assert_eq!(parse_xtool_version("xtool 1.16.1\n"), Some("1.16.1".to_string()));
+        assert_eq!(parse_xtool_version("xtool 1.16.1 (build abc)\n"), Some("1.16.1".to_string()));
+        // Fallback: last numeric token on the first non-empty line.
+        assert_eq!(parse_xtool_version("Version: 1.16.1\n"), Some("1.16.1".to_string()));
+    }
+
+    #[test]
+    fn parse_xtool_version_handles_missing() {
+        assert_eq!(parse_xtool_version(""), None);
+        assert_eq!(parse_xtool_version("not xtool"), None);
+    }
+
+    #[test]
+    fn windows_path_to_wsl_mnt_handles_typical_paths() {
+        let p = std::path::PathBuf::from(r"C:\Users\Admin\AppData\Local\OpenSwiftStudio\downloads\xtool-x86_64.AppImage");
+        assert_eq!(
+            windows_path_to_wsl_mnt(&p),
+            Some(
+                "/mnt/c/Users/Admin/AppData/Local/OpenSwiftStudio/downloads/xtool-x86_64.AppImage"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn windows_path_to_wsl_mnt_lowercases_drive_letter() {
+        let p = std::path::PathBuf::from(r"D:\Foo\Bar.txt");
+        assert_eq!(
+            windows_path_to_wsl_mnt(&p),
+            Some("/mnt/d/Foo/Bar.txt".to_string())
+        );
+    }
+
+    #[test]
+    fn windows_path_to_wsl_mnt_rejects_unc_or_relative() {
+        let p = std::path::PathBuf::from(r"\\server\share\file.txt");
+        assert_eq!(windows_path_to_wsl_mnt(&p), None);
+        let p2 = std::path::PathBuf::from(r"relative\path");
+        assert_eq!(windows_path_to_wsl_mnt(&p2), None);
+    }
+
     #[test]
     fn checks_always_return_a_message_or_metadata() {
         for (label, check) in [
             ("wsl2", check_wsl2 as fn() -> CheckResult),
             ("usbipd", check_usbipd as fn() -> CheckResult),
             ("toolchain", check_toolchain as fn() -> CheckResult),
+            ("xtool", check_xtool as fn() -> CheckResult),
         ] {
             let r = check();
             if r.found {

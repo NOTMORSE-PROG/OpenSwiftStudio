@@ -48,12 +48,13 @@ pub struct DetectionRecord {
 }
 
 // Aliases preserve the existing JSON field names introduced in the foundation
-// chunk (vsBuildToolsDetected) while letting the new wsl2/usbipd/swift records
-// share the same shape.
+// chunk (vsBuildToolsDetected) while letting the new wsl2/usbipd/swift/xtool
+// records share the same shape.
 pub type VsBuildToolsRecord = DetectionRecord;
 pub type Wsl2Record = DetectionRecord;
 pub type UsbipdRecord = DetectionRecord;
 pub type SwiftRecord = DetectionRecord;
+pub type XtoolRecord = DetectionRecord;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,6 +72,8 @@ pub struct SetupState {
     pub usbipd_detected: Option<UsbipdRecord>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub swift_detected: Option<SwiftRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xtool_detected: Option<XtoolRecord>,
 }
 
 fn setup_dir() -> Result<PathBuf, SetupError> {
@@ -163,6 +166,7 @@ mod tests {
             wsl2_detected: None,
             usbipd_detected: None,
             swift_detected: None,
+            xtool_detected: None,
         }
     }
 
@@ -183,14 +187,23 @@ mod tests {
             install_path: None,
             detected_at: "2026-05-05T10:00:00Z".to_string(),
         });
+        s.xtool_detected = Some(DetectionRecord {
+            found: true,
+            display_name: Some("xtool".to_string()),
+            version: Some("1.16.1".to_string()),
+            install_path: Some("~/.local/bin/xtool".to_string()),
+            detected_at: "2026-05-05T10:00:00Z".to_string(),
+        });
         let json = serde_json::to_string_pretty(&s).expect("serialize");
         assert!(json.contains("\"wsl2Detected\""), "expected wsl2Detected key");
         assert!(json.contains("\"usbipdDetected\""), "expected usbipdDetected key");
+        assert!(json.contains("\"xtoolDetected\""), "expected xtoolDetected key");
         // swift_detected stays None and should be omitted.
         assert!(!json.contains("\"swiftDetected\""), "None field should be skipped");
         let parsed: SetupState = serde_json::from_str(&json).expect("deserialize");
         assert!(parsed.wsl2_detected.is_some());
         assert!(parsed.usbipd_detected.is_some());
+        assert!(parsed.xtool_detected.is_some());
         assert!(parsed.swift_detected.is_none());
     }
 

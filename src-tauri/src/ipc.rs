@@ -70,6 +70,11 @@ pub fn setup_check_toolchain() -> CheckResult {
     checks::check_toolchain()
 }
 
+#[tauri::command]
+pub fn setup_check_xtool() -> CheckResult {
+    checks::check_xtool()
+}
+
 // ---------- Setup wizard installs (M0.5-3, M0.5-4, M0.5-5) ----------
 //
 // Async because the underlying subprocess + download can take 10 s – several
@@ -148,6 +153,19 @@ pub async fn setup_install_toolchain(window: tauri::Window) -> Result<InstallOut
     let outcome = tauri::async_runtime::spawn_blocking(move || {
         installs::install_toolchain(|event| {
             let _ = win.emit(INSTALL_PROGRESS_EVENT, payload_for("toolchain", event));
+        })
+    })
+    .await
+    .map_err(|e| format!("install task panicked: {e}"))?;
+    Ok(outcome)
+}
+
+#[tauri::command]
+pub async fn setup_install_xtool(window: tauri::Window) -> Result<InstallOutcome, String> {
+    let win = window.clone();
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        installs::install_xtool(|event| {
+            let _ = win.emit(INSTALL_PROGRESS_EVENT, payload_for("xtool", event));
         })
     })
     .await
