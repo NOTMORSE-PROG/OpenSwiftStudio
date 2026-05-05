@@ -1,22 +1,21 @@
 // Thin wrapper over the `keyring` crate. On Windows, this resolves to the
 // Windows Credential Manager (which encrypts entries with DPAPI under the
-// hood). The wizard's Apple ID step will store its session token here; right
-// now the module only exposes the primitive API + tests so the foundation is
-// in place when that step lands.
+// hood). The wizard's Apple ID step stores the user's Apple ID email here so
+// it can be pre-filled on next launch; the password is never persisted (xtool
+// keeps its own session token after `auth login` succeeds).
 //
 // API contract: idempotent delete, None-on-missing-entry retrieve. Errors
 // other than "entry not found" propagate as AuthError so callers can surface
 // them in the UI.
 
-// IPC commands that consume this module land with the Apple ID step; the
-// public API is exercised by the test suite in the meantime, so silence the
-// dead-code lint at module level rather than peppering #[allow] across every fn.
-#![allow(dead_code)]
-
 use keyring::{Entry, Error as KeyringError};
 use thiserror::Error;
 
 const SERVICE_NAME: &str = "org.openswiftstudio";
+
+/// Credential-store key for the user's Apple ID email. Used by the setup
+/// wizard's Apple ID step for next-launch pre-fill.
+pub const APPLE_ID_KEY: &str = "apple-id-email";
 
 #[derive(Debug, Error)]
 pub enum AuthError {
@@ -40,12 +39,15 @@ pub fn retrieve(key: &str) -> Result<Option<String>, AuthError> {
 }
 
 /// Remove the entry for `key`. Idempotent — succeeds even if the entry is
-/// already gone.
+/// already gone. Reserved for the future re-auth flow; kept on the public
+/// surface so callers don't need to re-plumb when that flow lands.
+#[allow(dead_code)]
 pub fn delete(key: &str) -> Result<(), AuthError> {
     delete_from(SERVICE_NAME, key)
 }
 
-/// True iff a value is stored under `key`.
+/// True iff a value is stored under `key`. Reserved for the future re-auth flow.
+#[allow(dead_code)]
 pub fn exists(key: &str) -> Result<bool, AuthError> {
     exists_in(SERVICE_NAME, key)
 }

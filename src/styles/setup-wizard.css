@@ -309,6 +309,12 @@
   border: 1px solid #f4877166;
 }
 
+.setup-install__alert--success {
+  background: #2ea14322;
+  color: #4ec9b0;
+  border: 1px solid #2ea14366;
+}
+
 .setup-install__progress {
   display: flex;
   flex-direction: column;
@@ -350,18 +356,18 @@
   border-radius: 3px;
 }
 
-/* Apple ID step credential UI — rendered but currently disabled. A follow-up
- * wires the Apple ID auth + XIP drop-zone + xtool setup invocation. */
+/* Apple ID step credential UI — Apple ID email, app-specific password,
+ * Xcode .xip picker, and the "Run xtool setup" button that drives
+ * `xtool auth login` then `xtool sdk install` against the user's WSL2 distro. */
 .setup-step__form-row {
   margin-top: 16px;
   padding: 12px;
   background: var(--vsc-sidebar-bg);
-  border: 1px dashed var(--vsc-border);
+  border: 1px solid var(--vsc-border);
   border-radius: 4px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  opacity: 0.6;
 }
 
 .setup-step__form-row-header {
@@ -382,6 +388,26 @@
   font-style: italic;
 }
 
+.setup-step__form-row-help {
+  color: var(--vsc-fg-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.setup-step__form-row-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--vsc-info-fg);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.setup-step__form-row-link:hover {
+  text-decoration: none;
+}
+
 .setup-step__input {
   width: 100%;
   padding: 6px 10px;
@@ -391,6 +417,7 @@
   border-radius: 3px;
   font-family: inherit;
   font-size: 12px;
+  box-sizing: border-box;
 }
 
 .setup-step__input:disabled {
@@ -398,6 +425,7 @@
 }
 
 .setup-step__dropzone {
+  width: 100%;
   padding: 20px 12px;
   background: var(--vsc-editor-bg);
   border: 1px dashed var(--vsc-border);
@@ -405,8 +433,26 @@
   text-align: center;
   font-size: 12px;
   color: var(--vsc-fg-secondary);
+  font-family: inherit;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.setup-step__dropzone:hover:not(:disabled) {
+  border-color: var(--vsc-info-fg);
+  color: var(--vsc-fg);
 }
 
 .setup-step__dropzone--disabled {
   cursor: not-allowed;
+}
+
+.setup-step__file-chosen {
+  font-family: var(--vsc-font-family-mono, monospace);
+  font-size: 11px;
+  color: var(--vsc-fg-secondary);
+  word-break: break-all;
+  padding: 4px 6px;
+  background: var(--vsc-input-bg);
+  border-radius: 3px;
 }

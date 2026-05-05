@@ -14,7 +14,7 @@ use serde::Deserialize;
 
 use crate::setup::checks::CheckResult;
 
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+pub(crate) const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 const BUILD_TOOLS_MIN_MAJOR: u32 = 16; // Build Tools 2019+
 
@@ -574,7 +574,7 @@ const WSL_DISTRO_BLOCKLIST: &[&str] = &["docker-desktop", "docker-desktop-data"]
 /// `None` if WSL is absent OR if the only installed distros are Docker
 /// Desktop's helpers. The wizard surfaces that as an actionable
 /// "install Ubuntu first" message.
-fn wsl_user_distro() -> Option<String> {
+pub(crate) fn wsl_user_distro() -> Option<String> {
     let output = Command::new("wsl.exe")
         .args(["-l", "-q"])
         .creation_flags(CREATE_NO_WINDOW)
@@ -665,7 +665,7 @@ fn parse_xtool_version(text: &str) -> Option<String> {
 /// to its WSL `/mnt/<drive>/...` equivalent. Lowercases the drive letter and
 /// flips backslashes to forward slashes. Only meaningful for paths on a local
 /// drive that WSL has auto-mounted (the typical case).
-fn windows_path_to_wsl_mnt(p: &Path) -> Option<String> {
+pub(crate) fn windows_path_to_wsl_mnt(p: &Path) -> Option<String> {
     let s = p.to_string_lossy().to_string();
     let mut chars = s.chars();
     let drive = chars.next()?;

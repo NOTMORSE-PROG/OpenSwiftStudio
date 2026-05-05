@@ -7,3 +7,4 @@
 pub mod state;
 pub mod checks;
 pub mod installs;
+pub mod xtool;

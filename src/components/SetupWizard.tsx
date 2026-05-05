@@ -32,6 +32,7 @@ import {
   checkWsl2,
   checkXtool,
   getSetupState,
+  getStoredAppleId,
   installToolchain,
   installUsbipd,
   installWsl2,
@@ -39,7 +40,10 @@ import {
   markSetupComplete,
   onInstallProgress,
   openExternal,
+  runXtool,
+  storeAppleId,
 } from "../lib/setupApi";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import SetupStepper from "./SetupStepper";
 
 const APP_VERSION_FALLBACK = "0.0.1";
@@ -657,6 +661,7 @@ const ToolchainStep: Component<ToolchainStepProps> = (props) => {
 };
 
 const APPLE_DEVELOPER_URL = "https://developer.apple.com/download/applications/";
+const APPLE_ID_MANAGE_URL = "https://appleid.apple.com/account/manage";
 
 type AppleIdStepProps = {
   xtool: SetupCheckResult | null;
@@ -665,6 +670,44 @@ type AppleIdStepProps = {
 
 const AppleIdStep: Component<AppleIdStepProps> = (props) => {
   const [busy, setBusy] = createSignal(false);
+
+  // Credential form state. Email pre-fills from DPAPI on mount; password is
+  // never persisted (xtool keeps its own session token after auth login).
+  const [appleIdEmail, setAppleIdEmail] = createSignal("");
+  const [appleIdPassword, setAppleIdPassword] = createSignal("");
+  const [xipPath, setXipPath] = createSignal("");
+
+  // Setup-run lifecycle (mirrors InstallControls).
+  const [running, setRunning] = createSignal(false);
+  const [logLines, setLogLines] = createSignal<string[]>([]);
+  const [progress, setProgress] = createSignal<ProgressState | null>(null);
+  const [outcome, setOutcome] = createSignal<InstallOutcome | null>(null);
+
+  let unlisten: (() => void) | undefined;
+  onMount(async () => {
+    try {
+      const stored = await getStoredAppleId();
+      if (stored) setAppleIdEmail(stored);
+    } catch (err) {
+      console.error("getStoredAppleId failed:", err);
+    }
+    unlisten = await onInstallProgress((payload) => {
+      if (payload.id !== "xtool-setup") return;
+      if (payload.kind === "line") {
+        setLogLines((prev) => {
+          const next = [...prev, payload.line];
+          return next.length > 8 ? next.slice(next.length - 8) : next;
+        });
+      } else {
+        setProgress({
+          phase: payload.phase,
+          received: payload.received,
+          total: payload.total,
+        });
+      }
+    });
+  });
+  onCleanup(() => unlisten?.());
 
   const runXtoolDetect = async () => {
     setBusy(true);
@@ -686,6 +729,65 @@ const AppleIdStep: Component<AppleIdStepProps> = (props) => {
     } finally {
       setBusy(false);
     }
+  };
+
+  const chooseXip = async () => {
+    try {
+      const selected = await openFileDialog({
+        filters: [{ name: "Xcode archive", extensions: ["xip"] }],
+        multiple: false,
+      });
+      if (typeof selected === "string") {
+        setXipPath(selected);
+      }
+    } catch (err) {
+      console.error("open dialog failed:", err);
+    }
+  };
+
+  const canSubmit = () =>
+    !running() &&
+    !!props.xtool?.found &&
+    appleIdEmail().trim().length > 0 &&
+    appleIdPassword().length > 0 &&
+    xipPath().length > 0;
+
+  const runSetup = async () => {
+    setRunning(true);
+    setLogLines([]);
+    setProgress(null);
+    setOutcome(null);
+    const email = appleIdEmail().trim();
+    try {
+      const result = await runXtool(email, appleIdPassword(), xipPath());
+      setOutcome(result);
+      if (result.kind === "success") {
+        try {
+          await storeAppleId(email);
+        } catch (err) {
+          console.error("storeAppleId failed:", err);
+        }
+        setAppleIdPassword("");
+        updateStep("apple-id", {
+          status: "detected",
+          message: `Signed in as ${email}; iOS SDK installed.`,
+        });
+      }
+    } catch (err) {
+      setOutcome({
+        kind: "failed",
+        exitCode: -1,
+        stderr: `xtool setup failed: ${String(err)}`,
+      });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const setupPercent = () => {
+    const p = progress();
+    if (!p || p.total === 0) return null;
+    return Math.min(100, Math.round((p.received / p.total) * 100));
   };
 
   return (
@@ -729,26 +831,95 @@ const AppleIdStep: Component<AppleIdStepProps> = (props) => {
       <div class="setup-step__form-row">
         <div class="setup-step__form-row-header">
           <span class="setup-step__form-row-title">Apple ID + Xcode .xip</span>
-          <span class="setup-step__form-row-pending">(wires up in a follow-up)</span>
         </div>
         <input
           class="setup-step__input"
           type="email"
           placeholder="apple-id@example.com"
-          disabled
+          autocomplete="email"
+          value={appleIdEmail()}
+          onInput={(e) => setAppleIdEmail(e.currentTarget.value)}
         />
         <input
           class="setup-step__input"
           type="password"
           placeholder="App-specific password"
-          disabled
+          autocomplete="off"
+          value={appleIdPassword()}
+          onInput={(e) => setAppleIdPassword(e.currentTarget.value)}
         />
-        <div class="setup-step__dropzone setup-step__dropzone--disabled">
-          Drop your Xcode .xip here — flow lands in a follow-up.
+        <div class="setup-step__form-row-help">
+          Use an <em>app-specific password</em> — Apple's documented 2FA bypass for
+          tooling. Generate one at appleid.apple.com → Sign-In and Security →
+          App-Specific Passwords.{" "}
+          <button
+            class="setup-step__form-row-link"
+            type="button"
+            onClick={() => void openExternal(APPLE_ID_MANAGE_URL)}
+          >
+            Get app-specific password &rarr;
+          </button>
         </div>
-        <button class="setup-wizard__btn" disabled>
-          Run xtool setup
+        <button
+          class="setup-step__dropzone"
+          type="button"
+          onClick={() => void chooseXip()}
+        >
+          {xipPath()
+            ? "Choose a different Xcode .xip"
+            : "Click to choose your Xcode .xip"}
         </button>
+        <Show when={xipPath()}>
+          <div class="setup-step__file-chosen">{xipPath()}</div>
+        </Show>
+        <div class="setup-install__row">
+          <button
+            class="setup-wizard__btn"
+            type="button"
+            onClick={() => void runSetup()}
+            disabled={!canSubmit()}
+          >
+            {running() ? "Running xtool setup..." : "Run xtool setup"}
+          </button>
+          <span class="setup-install__hint">
+            Runs <code>xtool auth login</code> then <code>xtool sdk install</code> inside WSL2.
+          </span>
+        </div>
+        <Show when={progress()}>
+          {(p) => (
+            <div class="setup-install__progress">
+              <div class="setup-install__progress-caption">
+                <span>{phaseLabel(p().phase)}</span>
+                <span>
+                  {p().total > 0
+                    ? `Stage ${p().received} / ${p().total} (${setupPercent()}%)`
+                    : `Stage ${p().received}`}
+                </span>
+              </div>
+              <progress
+                class="setup-install__progress-bar"
+                value={p().total > 0 ? p().received : undefined}
+                max={p().total > 0 ? p().total : undefined}
+              />
+            </div>
+          )}
+        </Show>
+        <Show when={running() || logLines().length > 0}>
+          <pre class="setup-install__log">
+            {logLines().length === 0 ? "Starting xtool..." : logLines().join("\n")}
+          </pre>
+        </Show>
+        <Show when={outcome()?.kind === "success"}>
+          <div class="setup-install__alert setup-install__alert--success">
+            xtool auth + iOS SDK install complete. Your Apple ID is saved for next launch.
+          </div>
+        </Show>
+        <Show when={outcome()?.kind === "failed"}>
+          <div class="setup-install__alert setup-install__alert--error">
+            xtool setup failed (exit {(outcome() as { exitCode: number }).exitCode}).{" "}
+            {(outcome() as { stderr: string }).stderr}
+          </div>
+        </Show>
       </div>
     </section>
   );

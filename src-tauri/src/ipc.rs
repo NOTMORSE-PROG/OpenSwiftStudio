@@ -12,9 +12,11 @@ use chrono::Utc;
 use serde_json::Value;
 use tauri::Emitter;
 
+use crate::auth::credential_store::{self, APPLE_ID_KEY};
 use crate::setup::checks::{self, CheckResult};
 use crate::setup::installs::{self, InstallOutcome, ProgressEvent, ProgressPhase};
 use crate::setup::state::{self, SetupState};
+use crate::setup::xtool;
 
 const INSTALL_PROGRESS_EVENT: &str = "setup-install-progress";
 
@@ -171,6 +173,43 @@ pub async fn setup_install_xtool(window: tauri::Window) -> Result<InstallOutcome
     .await
     .map_err(|e| format!("install task panicked: {e}"))?;
     Ok(outcome)
+}
+
+// ---------- xtool auth login + sdk install (M0.5-6) ----------
+//
+// Two-stage subprocess flow that drives `xtool auth login` then
+// `xtool sdk install` against the user's WSL2 distro. Streams progress events
+// under id "xtool-setup" so the wizard can render a single combined log +
+// progress bar. Email is the Apple ID; password is an app-specific password
+// generated at appleid.apple.com → Sign-In and Security → App-Specific
+// Passwords (cleanest 2FA bypass for tooling).
+
+#[tauri::command]
+pub async fn setup_run_xtool(
+    window: tauri::Window,
+    email: String,
+    password: String,
+    xip_path: String,
+) -> Result<InstallOutcome, String> {
+    let win = window.clone();
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        xtool::run_xtool_setup(&email, &password, &xip_path, |event| {
+            let _ = win.emit(INSTALL_PROGRESS_EVENT, payload_for("xtool-setup", event));
+        })
+    })
+    .await
+    .map_err(|e| format!("xtool setup task panicked: {e}"))?;
+    Ok(outcome)
+}
+
+#[tauri::command]
+pub fn setup_store_apple_id(email: String) -> Result<(), String> {
+    credential_store::store(APPLE_ID_KEY, &email).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn setup_get_stored_apple_id() -> Result<Option<String>, String> {
+    credential_store::retrieve(APPLE_ID_KEY).map_err(|e| e.to_string())
 }
 
 // ---------- Forward-looking stubs ----------

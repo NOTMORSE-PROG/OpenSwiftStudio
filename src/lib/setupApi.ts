@@ -76,7 +76,12 @@ export type InstallOutcome =
   | { kind: "rebootRequired"; stdout: string }
   | { kind: "failed"; exitCode: number; stderr: string };
 
-export type InstallId = "wsl2" | "usbipd" | "toolchain" | "xtool";
+export type InstallId =
+  | "wsl2"
+  | "usbipd"
+  | "toolchain"
+  | "xtool"
+  | "xtool-setup";
 
 export type ProgressPhase = "download" | "verify" | "install";
 
@@ -103,6 +108,34 @@ export const installToolchain = (): Promise<InstallOutcome> =>
 
 export const installXtool = (): Promise<InstallOutcome> =>
   invoke<InstallOutcome>("setup_install_xtool");
+
+// ---------- xtool auth login + sdk install (Apple ID step) ----------
+
+/**
+ * Drive `xtool auth login` then `xtool sdk install` against the user's WSL2
+ * distro. `xipPath` is a Windows path to a local Xcode .xip; the Rust side
+ * maps it to /mnt/<drive>/... before passing to xtool.
+ *
+ * The password should be an app-specific password generated at
+ * appleid.apple.com → Sign-In and Security → App-Specific Passwords. xtool
+ * stores its own session token after `auth login` succeeds, so this never
+ * needs to be supplied again unless the token expires.
+ */
+export const runXtool = (
+  email: string,
+  password: string,
+  xipPath: string,
+): Promise<InstallOutcome> =>
+  invoke<InstallOutcome>("setup_run_xtool", { email, password, xipPath });
+
+/** Persist the Apple ID email in Windows Credential Manager (DPAPI-encrypted)
+ *  for next-launch pre-fill. The password is never persisted. */
+export const storeAppleId = (email: string): Promise<void> =>
+  invoke<void>("setup_store_apple_id", { email });
+
+/** Read the previously-stored Apple ID email, or null if none was stored. */
+export const getStoredAppleId = (): Promise<string | null> =>
+  invoke<string | null>("setup_get_stored_apple_id");
 
 /**
  * Subscribe to streaming install-progress events. The handler fires for every
