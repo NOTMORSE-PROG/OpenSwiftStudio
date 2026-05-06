@@ -661,7 +661,7 @@ fn parse_xtool_version(text: &str) -> Option<String> {
     None
 }
 
-/// Convert a Windows path like `C:\Users\Admin\AppData\Local\OpenSwiftStudio\foo`
+/// Convert a Windows path like `C:\Users\<name>\AppData\Local\OpenSwiftStudio\foo`
 /// to its WSL `/mnt/<drive>/...` equivalent. Lowercases the drive letter and
 /// flips backslashes to forward slashes. Only meaningful for paths on a local
 /// drive that WSL has auto-mounted (the typical case).
@@ -1311,11 +1311,11 @@ mod tests {
 
     #[test]
     fn windows_path_to_wsl_mnt_handles_typical_paths() {
-        let p = std::path::PathBuf::from(r"C:\Users\Admin\AppData\Local\OpenSwiftStudio\downloads\xtool-x86_64.AppImage");
+        let p = std::path::PathBuf::from(r"C:\Users\name\AppData\Local\OpenSwiftStudio\downloads\xtool-x86_64.AppImage");
         assert_eq!(
             windows_path_to_wsl_mnt(&p),
             Some(
-                "/mnt/c/Users/Admin/AppData/Local/OpenSwiftStudio/downloads/xtool-x86_64.AppImage"
+                "/mnt/c/Users/name/AppData/Local/OpenSwiftStudio/downloads/xtool-x86_64.AppImage"
                     .to_string()
             )
         );

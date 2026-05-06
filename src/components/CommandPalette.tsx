@@ -58,6 +58,10 @@ const fuzzyScore = (query: string, text: string): number => {
   const q = query.toLowerCase();
   const t = text.toLowerCase();
   if (t.includes(q)) return 1;
+  const stripSeparators = (s: string) => s.replace(/[-_]/g, "");
+  const qStripped = stripSeparators(q);
+  const tStripped = stripSeparators(t);
+  if (qStripped && tStripped.includes(qStripped)) return 1;
   let qi = 0;
   for (let i = 0; i < t.length && qi < q.length; i++) {
     if (t[i] === q[qi]) qi++;
