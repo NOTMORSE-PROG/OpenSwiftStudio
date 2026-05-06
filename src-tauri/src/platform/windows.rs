@@ -697,10 +697,10 @@ use crate::setup::installs::{
 /// against a new Swift release is a two-line edit followed by an empirical
 /// re-run of the `verify_swift_download_hash` test.
 const SWIFT_DOWNLOAD_URL: &str =
-    "https://download.swift.org/swift-6.2.4-release/windows10/swift-6.2.4-RELEASE/swift-6.2.4-RELEASE-windows10.exe";
+    "https://download.swift.org/swift-6.3.1-release/windows10/swift-6.3.1-RELEASE/swift-6.3.1-RELEASE-windows10.exe";
 const SWIFT_EXPECTED_SHA256: &str =
-    "222501d4a0ef6ec3b2f08b3e0055140bb3a5136527542239bb925f979689f4ad";
-const SWIFT_INSTALLER_FILENAME: &str = "swift-6.2.4-RELEASE-windows10.exe";
+    "e5a0e6b5bd8f8f3045b1d2420c06eceb6b7918d800bec3733ce4d657e7170f51";
+const SWIFT_INSTALLER_FILENAME: &str = "swift-6.3.1-RELEASE-windows10.exe";
 
 /// Pinned xtool AppImage. Bumping the version is a three-line edit followed
 /// by an empirical re-run of `verify_xtool_download_hash`.
@@ -806,7 +806,7 @@ fn winget_present() -> bool {
         .unwrap_or(false)
 }
 
-/// Download Swift 6.2.4, verify its SHA256 against the pinned value, strip
+/// Download Swift 6.3.1, verify its SHA256 against the pinned value, strip
 /// Mark-of-the-Web (defensive — SmartScreen can block elevated launches of
 /// internet-zone downloads), then run the installer with `/passive`. Per-user
 /// install — no `-Verb RunAs` needed; Windows still shows the installer's own
@@ -1221,15 +1221,15 @@ mod tests {
     }
 
     /// Empirical verification that `download_with_progress` streams the real
-    /// Swift 6.2.4 installer cleanly, computes a SHA256 matching the pinned
+    /// Swift 6.3.1 installer cleanly, computes a SHA256 matching the pinned
     /// constant, and emits Progress events along the way. `#[ignore]`-gated
-    /// because it downloads ~900 MB; run explicitly with
+    /// because it downloads ~1.7 GB; run explicitly with
     /// `cargo test -- --ignored verify_swift_download_hash` whenever the
     /// pinned URL or hash changes.
     #[test]
-    #[ignore = "downloads ~900 MB; opt-in via --ignored"]
+    #[ignore = "downloads ~1.7 GB; opt-in via --ignored"]
     fn verify_swift_download_hash() {
-        let tmp = std::env::temp_dir().join("oss-test-swift-6.2.4.exe");
+        let tmp = std::env::temp_dir().join("oss-test-swift-6.3.1.exe");
         // Clean any prior run.
         let _ = std::fs::remove_file(&tmp);
 
