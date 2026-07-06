@@ -426,3 +426,114 @@ html, body {
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }
+
+/* Run / Stop / config controls in the status bar (M1-5 / M1-13) */
+.status-bar__item--run .codicon,
+.status-bar__item--stop .codicon,
+.status-bar__item--config .codicon {
+  font-size: 13px;
+}
+
+.status-bar__item--disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.status-bar__item--disabled:hover {
+  background: transparent;
+}
+
+/* Console pane (M1-6) */
+.panel__body--console {
+  padding: 0;
+  overflow: hidden;
+}
+
+.console {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.console__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--vsc-panel-border);
+  flex-shrink: 0;
+}
+
+.console__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: var(--vsc-fg-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.console__btn:hover {
+  background: var(--vsc-list-hover-bg);
+  color: var(--vsc-fg);
+}
+
+.console__btn .codicon {
+  font-size: 13px;
+}
+
+.console__body {
+  flex: 1;
+  overflow: auto;
+  padding: 6px 12px;
+  font-family: var(--vsc-mono-font-family);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.console__empty {
+  color: var(--vsc-fg-secondary);
+  font-style: italic;
+}
+
+.console__line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.console__line--stderr {
+  color: var(--vsc-error-fg);
+}
+
+.console__line--meta {
+  color: var(--vsc-fg-secondary);
+}
+
+.console__jump {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--vsc-button-bg);
+  color: var(--vsc-button-fg);
+  border: none;
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.console__jump:hover {
+  background: var(--vsc-button-hover-bg);
+}
+
+.console__jump .codicon {
+  font-size: 13px;
+}

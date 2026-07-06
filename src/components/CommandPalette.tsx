@@ -15,13 +15,19 @@ import {
 import {
   clearProject,
   currentProject,
+  hasExecutable,
+  isRunActive,
+  runConfig,
   setCurrentProject,
+  setHasExecutable,
   setProjectFiles,
   setProjectOpenError,
   setProjectOpenInProgress,
+  setRunConfig,
 } from "../state/projectState";
 import { resetSetup } from "../lib/setupApi";
-import { closeProject, getProjectFiles, openProject } from "../lib/projectApi";
+import { closeProject, getProjectFiles, hasExecutableProduct, openProject } from "../lib/projectApi";
+import { triggerRun, triggerStop } from "../lib/runController";
 
 /// Drive the open-folder picker → project_open → project_get_files chain.
 /// Surfaces failures via `projectOpenError` so the wizard-style alert in the
@@ -48,6 +54,7 @@ const runProjectOpen = async () => {
     const files = await getProjectFiles(path);
     setCurrentProject(meta);
     setProjectFiles(files);
+    setHasExecutable(hasExecutableProduct(meta));
     setActiveView("files");
   } catch (err) {
     console.error("project_open failed:", err);
@@ -94,7 +101,19 @@ const commands = (): Command[] => [
     ? [{ id: "project.close", label: "Project: Close Folder", run: () => { void runProjectClose(); } } as const]
     : []),
   { id: "project.new",  label: "Project: New (wires up in M1 chunk 4)",  run: () => console.log("M1 chunk 4") },
-  { id: "run.start",    label: "Run: Start (wires up in M1 chunk 2)",    run: () => console.log("M1 chunk 2") },
+  ...(currentProject() && hasExecutable() && !isRunActive()
+    ? [{ id: "run.start", label: "Run: Start", run: () => { void triggerRun(); } } as const]
+    : []),
+  ...(isRunActive()
+    ? [{ id: "run.stop", label: "Run: Stop", run: () => { void triggerStop(); } } as const]
+    : []),
+  ...(currentProject() && !isRunActive()
+    ? [{
+        id: "run.toggleConfiguration",
+        label: `Run: Switch Configuration to ${runConfig() === "debug" ? "Release" : "Debug"}`,
+        run: () => setRunConfig(runConfig() === "debug" ? "release" : "debug"),
+      } as const]
+    : []),
   { id: "debug.start",  label: "Debug: Start (wires up in M5)",  run: () => console.log("M5") },
   {
     id: "setup.rerun",

@@ -7,7 +7,9 @@
 // (session.json — last project, open tabs, etc.) lands in M1 chunk 3.
 
 pub mod parser;
+pub mod run;
 pub mod state;
 
 pub use parser::{FileTreeNode, PackageDescription, parse_package, read_project_files};
+pub use run::RunState;
 pub use state::ProjectState;

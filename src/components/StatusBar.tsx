@@ -1,7 +1,15 @@
 import { Component, Show, createSignal, onMount } from "solid-js";
 import { setCommandPaletteOpen } from "../state/appState";
-import { currentProject } from "../state/projectState";
+import {
+  currentProject,
+  hasExecutable,
+  isRunActive,
+  runConfig,
+  runStatus,
+  setRunConfig,
+} from "../state/projectState";
 import { getToolchain } from "../lib/projectApi";
+import { triggerRun, triggerStop } from "../lib/runController";
 
 const StatusBar: Component = () => {
   const [toolchainLabel, setToolchainLabel] = createSignal<string>("Swift");
@@ -37,6 +45,40 @@ const StatusBar: Component = () => {
             <span>{p().name}</span>
           </div>
         )}
+      </Show>
+      <Show when={currentProject()}>
+        <Show
+          when={isRunActive()}
+          fallback={
+            <div
+              class="status-bar__item status-bar__item--run"
+              classList={{ "status-bar__item--disabled": !hasExecutable() }}
+              title={hasExecutable() ? "Build and run this project" : "No executable product to run"}
+              onClick={() => { if (hasExecutable()) void triggerRun(); }}
+            >
+              <span class="codicon codicon-play" aria-hidden="true" />
+              <span>Run</span>
+            </div>
+          }
+        >
+          <div
+            class="status-bar__item status-bar__item--stop"
+            title="Stop the running project"
+            onClick={() => void triggerStop()}
+          >
+            <span class="codicon codicon-debug-stop" aria-hidden="true" />
+            <span>{runStatus() === "building" ? "Building…" : "Stop"}</span>
+          </div>
+        </Show>
+        <div
+          class="status-bar__item status-bar__item--config"
+          classList={{ "status-bar__item--disabled": isRunActive() }}
+          title={isRunActive() ? "Cannot switch configuration during a run" : "Toggle Debug / Release"}
+          onClick={() => { if (!isRunActive()) setRunConfig(runConfig() === "debug" ? "release" : "debug"); }}
+        >
+          <span class="codicon codicon-settings-gear" aria-hidden="true" />
+          <span>{runConfig() === "debug" ? "Debug" : "Release"}</span>
+        </div>
       </Show>
       <div class="status-bar__item">M1 — pre-release</div>
       <div class="status-bar__spacer" />

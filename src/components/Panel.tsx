@@ -1,5 +1,6 @@
 import { Component, For, Match, Switch } from "solid-js";
 import { activePanelTab, setActivePanelTab, panelCollapsed, PanelTab } from "../state/appState";
+import ConsoleView from "./ConsoleView";
 
 type TabDef = { id: PanelTab; label: string };
 
@@ -28,10 +29,10 @@ const Panel: Component = () => {
           )}
         </For>
       </div>
-      <div class="panel__body">
+      <div class="panel__body" classList={{ "panel__body--console": activePanelTab() === "console" }}>
         <Switch>
           <Match when={activePanelTab() === "console"}>
-            [info] OpenSwiftStudio M0 shell ready.
+            <ConsoleView />
           </Match>
           <Match when={activePanelTab() === "debug"}>
             Debug output will appear here once M5 wires LLDB DAP.

@@ -16,7 +16,8 @@ use serde_json::Value;
 use tauri::Emitter;
 
 use crate::auth::credential_store::{self, APPLE_ID_KEY};
-use crate::project::{self, FileTreeNode, PackageDescription, ProjectState};
+use crate::project::run::{self, BuildConfig};
+use crate::project::{self, FileTreeNode, PackageDescription, ProjectState, RunState};
 use crate::setup::checks::{self, CheckResult};
 use crate::setup::installs::{self, InstallOutcome, ProgressEvent, ProgressPhase};
 use crate::setup::state::{self, SetupState};
@@ -280,21 +281,65 @@ pub fn app_get_toolchain() -> CheckResult {
     checks::check_toolchain()
 }
 
+// ---------- Run (M1-5 / M1-6 / M1-13) ----------
+
+/// Build the open project under `config` and execute its binary, streaming
+/// output as `project-run-progress` events. Returns immediately after spawning
+/// the pipeline on a blocking thread — the frontend drives its UI off the
+/// events, not this promise. Fails synchronously (before spawning) when no
+/// project is open, the project has no executable product, or a run is already
+/// active.
+#[tauri::command]
+pub fn run_start(
+    window: tauri::Window,
+    config: BuildConfig,
+    current: tauri::State<'_, CurrentProject>,
+    run_state: tauri::State<'_, RunState>,
+) -> Result<(), String> {
+    let (root, product) = {
+        let guard = current
+            .lock()
+            .map_err(|e| format!("project state lock poisoned: {e}"))?;
+        let project = guard.as_ref().ok_or("no project is open")?;
+        let product = run::executable_name(&project.package)
+            .ok_or("this project has no executable product to run")?;
+        (project.package.root_path.clone(), product)
+    };
+
+    {
+        let mut g = run_state
+            .lock()
+            .map_err(|e| format!("run state lock poisoned: {e}"))?;
+        if g.active {
+            return Err("a run is already in progress".to_string());
+        }
+        g.active = true;
+        g.cancelled = false;
+        g.child_pid = None;
+    }
+
+    let win = window.clone();
+    let state = run_state.inner().clone();
+    let root = PathBuf::from(root);
+    tauri::async_runtime::spawn_blocking(move || {
+        run::run_pipeline(&win, config, root, product, &state);
+    });
+    Ok(())
+}
+
+/// Stop the active run: kill the subprocess tree and mark it cancelled. No-op
+/// when nothing is running.
+#[tauri::command]
+pub fn run_stop(run_state: tauri::State<'_, RunState>) -> Result<(), String> {
+    run::stop(run_state.inner());
+    Ok(())
+}
+
 // ---------- Forward-looking stubs ----------
 //
 // These define the IPC surface for future milestones. Bodies return an error
 // so any UI that wires them prematurely fails loudly. Each names its owning
 // milestone so the next contributor knows where to fill it in.
-
-#[tauri::command]
-pub fn run_start(_scheme: String) -> Result<u32, String> {
-    Err("not implemented; lands in M1/M3".to_string())
-}
-
-#[tauri::command]
-pub fn run_stop(_pid: u32) -> Result<(), String> {
-    Err("not implemented; lands in M3".to_string())
-}
 
 #[tauri::command]
 pub fn debug_attach(_pid: u32) -> Result<(), String> {
