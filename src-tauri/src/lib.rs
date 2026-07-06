@@ -7,6 +7,7 @@
 
 mod auth;
 mod platform;
+mod project;
 mod setup;
 mod ipc;
 
@@ -16,8 +17,10 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
+        .manage::<ipc::CurrentProject>(std::sync::Mutex::new(None))
         .invoke_handler(tauri::generate_handler![
             ipc::app_info,
+            ipc::app_get_toolchain,
             ipc::setup_get_state,
             ipc::setup_mark_complete,
             ipc::setup_reset,
@@ -35,6 +38,8 @@ pub fn run() {
             ipc::setup_get_stored_apple_id,
             ipc::project_open,
             ipc::project_close,
+            ipc::project_get_meta,
+            ipc::project_get_files,
             ipc::run_start,
             ipc::run_stop,
             ipc::debug_attach,

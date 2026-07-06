@@ -142,6 +142,63 @@ html, body {
   line-height: 1.5;
 }
 
+/* Project tree (M1 chunk 1: flat one-level listing; recursive in M2) */
+.project-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.project-tree__degraded {
+  margin: 0 8px 8px;
+  padding: 8px 10px;
+  background: var(--vsc-input-bg);
+  border-left: 2px solid var(--vsc-warning-fg, #cca700);
+  color: var(--vsc-fg);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.project-tree__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.project-tree__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 20px;
+  font-size: 13px;
+  color: var(--vsc-fg);
+  cursor: default;
+}
+
+.project-tree__item:hover {
+  background: var(--vsc-list-hover-bg, rgba(255, 255, 255, 0.04));
+}
+
+.project-tree__item .codicon {
+  font-size: 16px;
+  color: var(--vsc-fg-secondary);
+  flex-shrink: 0;
+}
+
+.project-tree__item--dir .codicon {
+  color: var(--vsc-symbol-folder, #c5c5c5);
+}
+
+.project-tree__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-bar__item--project .codicon {
+  font-size: 14px;
+}
+
 /* Editor area */
 .editor-area {
   flex: 1;

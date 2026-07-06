@@ -1,12 +1,18 @@
-import { Component, Match, Switch } from "solid-js";
+import { Component, Match, Show, Switch } from "solid-js";
 import { activeView, sidebarCollapsed } from "../state/appState";
+import { currentProject } from "../state/projectState";
+import ProjectTreeView from "./ProjectTreeView";
 
 const Sidebar: Component = () => {
   return (
     <aside class="sidebar" classList={{ collapsed: sidebarCollapsed() }}>
       <div class="sidebar__header">
         <Switch>
-          <Match when={activeView() === "files"}>Explorer</Match>
+          <Match when={activeView() === "files"}>
+            <Show when={currentProject()} fallback={<>Explorer</>}>
+              {(p) => <span title={p().rootPath}>{p().name.toUpperCase()}</span>}
+            </Show>
+          </Match>
           <Match when={activeView() === "search"}>Search</Match>
           <Match when={activeView() === "scm"}>Source Control</Match>
           <Match when={activeView() === "debug"}>Run and Debug</Match>
@@ -16,9 +22,16 @@ const Sidebar: Component = () => {
       <div class="sidebar__content">
         <Switch>
           <Match when={activeView() === "files"}>
-            <p class="sidebar__placeholder">
-              No project open yet. New Project / Open Folder will appear here in M1.
-            </p>
+            <Show
+              when={currentProject()}
+              fallback={
+                <p class="sidebar__placeholder">
+                  No project open. Use Ctrl+Shift+P → "Project: Open" to pick a SwiftPM folder.
+                </p>
+              }
+            >
+              <ProjectTreeView />
+            </Show>
           </Match>
           <Match when={activeView() === "search"}>
             <p class="sidebar__placeholder">Search wires up in M2 (after Monaco + LSP).</p>

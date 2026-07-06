@@ -54,8 +54,10 @@ desktop.ini
 # Internal / local-only — never pushed.
 # Project-internal notes that should not appear in the published tree.
 AI_LOG/
+tickets/
 README.internal.md
 CLAUDE.md
+.gitmessage
 NOTICE
 .github/PULL_REQUEST_TEMPLATE.md
 .github/ISSUE_TEMPLATE/

@@ -1,4 +1,5 @@
 import { Component, For, createMemo, createSignal, Show, onMount, onCleanup } from "solid-js";
+import { open as openFolderDialog } from "@tauri-apps/plugin-dialog";
 import {
   commandPaletteOpen, setCommandPaletteOpen,
   setSidebarCollapsed, sidebarCollapsed,
@@ -11,7 +12,60 @@ import {
   setSetupWizardOpen,
   setStepStates,
 } from "../state/setupState";
+import {
+  clearProject,
+  currentProject,
+  setCurrentProject,
+  setProjectFiles,
+  setProjectOpenError,
+  setProjectOpenInProgress,
+} from "../state/projectState";
 import { resetSetup } from "../lib/setupApi";
+import { closeProject, getProjectFiles, openProject } from "../lib/projectApi";
+
+/// Drive the open-folder picker → project_open → project_get_files chain.
+/// Surfaces failures via `projectOpenError` so the wizard-style alert in the
+/// sidebar can render them; keeps the IPC layer's error string verbatim so
+/// users see why the parse failed (most common cause: folder lacks
+/// Package.swift, in which case the wizard nudges them to pick a SwiftPM root).
+const runProjectOpen = async () => {
+  setProjectOpenError(null);
+  let selected: string | string[] | null;
+  try {
+    selected = await openFolderDialog({ directory: true, multiple: false });
+  } catch (err) {
+    console.error("open dialog failed:", err);
+    setProjectOpenError(String(err));
+    return;
+  }
+  if (typeof selected !== "string") {
+    return; // user cancelled
+  }
+  const path = selected;
+  setProjectOpenInProgress(true);
+  try {
+    const meta = await openProject(path);
+    const files = await getProjectFiles(path);
+    setCurrentProject(meta);
+    setProjectFiles(files);
+    setActiveView("files");
+  } catch (err) {
+    console.error("project_open failed:", err);
+    setProjectOpenError(String(err));
+    clearProject();
+  } finally {
+    setProjectOpenInProgress(false);
+  }
+};
+
+const runProjectClose = async () => {
+  try {
+    await closeProject();
+  } catch (err) {
+    console.error("project_close failed:", err);
+  }
+  clearProject();
+};
 
 type Command = {
   id: string;
@@ -35,8 +89,12 @@ const commands = (): Command[] => [
   { id: "view.openDebug",      label: "View: Open Run and Debug", run: () => setActiveView("debug") },
   { id: "view.openIosDevices", label: "View: Open iOS Devices",   run: () => setActiveView("ios-devices") },
   { id: "view.openSCM",        label: "View: Open Source Control", run: () => setActiveView("scm") },
-  { id: "project.new",  label: "Project: New (wires up in M1)",  run: () => console.log("M1") },
-  { id: "run.start",    label: "Run: Start (wires up in M3)",    run: () => console.log("M3") },
+  { id: "project.open", label: "Project: Open Folder...",       run: () => { void runProjectOpen(); } },
+  ...(currentProject()
+    ? [{ id: "project.close", label: "Project: Close Folder", run: () => { void runProjectClose(); } } as const]
+    : []),
+  { id: "project.new",  label: "Project: New (wires up in M1 chunk 4)",  run: () => console.log("M1 chunk 4") },
+  { id: "run.start",    label: "Run: Start (wires up in M1 chunk 2)",    run: () => console.log("M1 chunk 2") },
   { id: "debug.start",  label: "Debug: Start (wires up in M5)",  run: () => console.log("M5") },
   {
     id: "setup.rerun",

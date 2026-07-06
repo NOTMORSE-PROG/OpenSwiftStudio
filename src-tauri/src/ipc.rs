@@ -8,15 +8,24 @@
 // Errors as Result<_, String> — Tauri-friendly, sidesteps serde::Serialize
 // constraints that anyhow / thiserror enums would impose at the IPC boundary.
 
+use std::path::PathBuf;
+use std::sync::Mutex;
+
 use chrono::Utc;
 use serde_json::Value;
 use tauri::Emitter;
 
 use crate::auth::credential_store::{self, APPLE_ID_KEY};
+use crate::project::{self, FileTreeNode, PackageDescription, ProjectState};
 use crate::setup::checks::{self, CheckResult};
 use crate::setup::installs::{self, InstallOutcome, ProgressEvent, ProgressPhase};
 use crate::setup::state::{self, SetupState};
 use crate::setup::xtool;
+
+/// Tauri-managed slot holding the currently-open project (or `None`). Disk
+/// persistence (session.json) lands in M1 chunk 3; chunk 1 only needs the
+/// running process to remember which project is active.
+pub type CurrentProject = Mutex<Option<ProjectState>>;
 
 const INSTALL_PROGRESS_EVENT: &str = "setup-install-progress";
 
@@ -212,21 +221,70 @@ pub fn setup_get_stored_apple_id() -> Result<Option<String>, String> {
     credential_store::retrieve(APPLE_ID_KEY).map_err(|e| e.to_string())
 }
 
+// ---------- Project (M1 chunk 1) ----------
+
+/// Open a SwiftPM project folder. Parses Package.swift via the two-tier
+/// `swift package describe` → regex-fallback chain in `project::parser` and
+/// stores the resulting state in the Tauri-managed slot. Returns the parsed
+/// description so the frontend can render targets/products without a follow-up
+/// round-trip.
+#[tauri::command]
+pub fn project_open(
+    path: String,
+    current: tauri::State<'_, CurrentProject>,
+) -> Result<PackageDescription, String> {
+    let root = PathBuf::from(&path);
+    let package = project::parse_package(&root).map_err(|e| e.message)?;
+    let state = ProjectState {
+        package: package.clone(),
+        opened_at: Utc::now(),
+    };
+    *current.lock().map_err(|e| format!("project state lock poisoned: {e}"))? = Some(state);
+    Ok(package)
+}
+
+#[tauri::command]
+pub fn project_close(current: tauri::State<'_, CurrentProject>) -> Result<(), String> {
+    *current.lock().map_err(|e| format!("project state lock poisoned: {e}"))? = None;
+    Ok(())
+}
+
+/// Returns the parsed manifest of the currently-open project, or `None` when
+/// no project is open. Used by the frontend on app start (after restoring
+/// session.json in chunk 3) and after focus changes.
+#[tauri::command]
+pub fn project_get_meta(
+    current: tauri::State<'_, CurrentProject>,
+) -> Result<Option<PackageDescription>, String> {
+    let guard = current
+        .lock()
+        .map_err(|e| format!("project state lock poisoned: {e}"))?;
+    Ok(guard.as_ref().map(|s| s.package.clone()))
+}
+
+/// Read the project root's direct children (one level), filtered against the
+/// blocklist. Recursive expansion alongside Monaco lands in M2.
+#[tauri::command]
+pub fn project_get_files(path: String) -> Result<Vec<FileTreeNode>, String> {
+    let root = PathBuf::from(&path);
+    project::read_project_files(&root).map_err(|e| e.message)
+}
+
+/// Returns the live Swift toolchain detection. Status bar consumes this on
+/// mount to show the active version. We don't cache here — a `swift --version`
+/// subprocess returns in well under a second and the result is the source of
+/// truth (cached `setup.json` records can be stale if the user uninstalled
+/// Swift between sessions).
+#[tauri::command]
+pub fn app_get_toolchain() -> CheckResult {
+    checks::check_toolchain()
+}
+
 // ---------- Forward-looking stubs ----------
 //
 // These define the IPC surface for future milestones. Bodies return an error
 // so any UI that wires them prematurely fails loudly. Each names its owning
 // milestone so the next contributor knows where to fill it in.
-
-#[tauri::command]
-pub fn project_open(_path: String) -> Result<(), String> {
-    Err("not implemented; lands in M1".to_string())
-}
-
-#[tauri::command]
-pub fn project_close() -> Result<(), String> {
-    Err("not implemented; lands in M1".to_string())
-}
 
 #[tauri::command]
 pub fn run_start(_scheme: String) -> Result<u32, String> {
