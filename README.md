@@ -4,6 +4,10 @@
 
 OpenSwiftStudio is a free, open-source IDE that lets you write, run, and debug iOS apps on Windows — without owning a Mac, without paying for cloud services, without learning a new language. Just Swift, in a familiar VS Code-style editor, with a real iPhone emulator running right next to your code.
 
+![OpenSwiftStudio running on Windows: a VS Code-style editor with activity bar, file explorer, welcome tab, console panel, and status bar](docs/screenshots/m0-shell.png)
+
+*The editor shell running on Windows 10 (M0 milestone). Monaco editor and the iPhone emulator pane land in later milestones.*
+
 > ⚠️ **Early development.** OpenSwiftStudio is pre-release. Star the repo to follow along.
 
 ## Why
