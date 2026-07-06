@@ -17,6 +17,7 @@ use tauri::Emitter;
 
 use crate::auth::credential_store::{self, APPLE_ID_KEY};
 use crate::project::run::{self, BuildConfig};
+use crate::project::session::{self, SessionState};
 use crate::project::{self, FileTreeNode, PackageDescription, ProjectState, RunState};
 use crate::setup::checks::{self, CheckResult};
 use crate::setup::installs::{self, InstallOutcome, ProgressEvent, ProgressPhase};
@@ -333,6 +334,29 @@ pub fn run_start(
 pub fn run_stop(run_state: tauri::State<'_, RunState>) -> Result<(), String> {
     run::stop(run_state.inner());
     Ok(())
+}
+
+// ---------- Session persistence (M1-7) ----------
+//
+// The frontend saves a snapshot eagerly on each session-relevant change
+// (project open/close, build-config toggle) and loads it once on startup to
+// restore the last-opened project + build config. Save is atomic (tempfile +
+// rename); a corrupt or future-schema file loads as None so the IDE launches
+// clean. The Package.swift file-watcher half of M1-7 is tracked as M1-15.
+
+#[tauri::command]
+pub fn session_load() -> Result<Option<SessionState>, String> {
+    session::read_session().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn session_save(state: SessionState) -> Result<(), String> {
+    session::write_session(&state).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn session_clear() -> Result<(), String> {
+    session::clear_session().map_err(|e| e.to_string())
 }
 
 // ---------- Forward-looking stubs ----------

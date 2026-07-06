@@ -1,6 +1,7 @@
 import { Component, Match, Show, Switch } from "solid-js";
 import { activeView, sidebarCollapsed } from "../state/appState";
 import { currentProject } from "../state/projectState";
+import { restoreNotice, setRestoreNotice } from "../lib/sessionController";
 import ProjectTreeView from "./ProjectTreeView";
 
 const Sidebar: Component = () => {
@@ -25,9 +26,23 @@ const Sidebar: Component = () => {
             <Show
               when={currentProject()}
               fallback={
-                <p class="sidebar__placeholder">
-                  No project open. Use Ctrl+Shift+P → "Project: Open" to pick a SwiftPM folder.
-                </p>
+                <>
+                  <Show when={restoreNotice()}>
+                    <div class="sidebar__notice">
+                      <span>{restoreNotice()}</span>
+                      <button
+                        class="sidebar__notice-dismiss"
+                        title="Dismiss"
+                        onClick={() => setRestoreNotice(null)}
+                      >
+                        <span class="codicon codicon-close" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </Show>
+                  <p class="sidebar__placeholder">
+                    No project open. Use Ctrl+Shift+P → "Project: Open" to pick a SwiftPM folder.
+                  </p>
+                </>
               }
             >
               <ProjectTreeView />

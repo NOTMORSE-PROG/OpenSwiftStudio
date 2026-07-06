@@ -8,6 +8,7 @@
 
 pub mod parser;
 pub mod run;
+pub mod session;
 pub mod state;
 
 pub use parser::{FileTreeNode, PackageDescription, parse_package, read_project_files};

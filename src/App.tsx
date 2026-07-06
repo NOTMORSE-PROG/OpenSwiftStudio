@@ -8,14 +8,19 @@ import StatusBar from "./components/StatusBar";
 import CommandPalette, { useCommandPaletteShortcut } from "./components/CommandPalette";
 import SetupWizard from "./components/SetupWizard";
 import { installRunListener } from "./lib/runController";
+import { installSessionAutosave, restoreSession } from "./lib/sessionController";
 
 const App: Component = () => {
   useCommandPaletteShortcut();
+
+  // Autosave must be installed during setup (before restore flips it on).
+  installSessionAutosave();
 
   // Single listener for run-progress events for the app's lifetime.
   let unlistenRun: UnlistenFn | undefined;
   onMount(async () => {
     unlistenRun = await installRunListener();
+    await restoreSession();
   });
   onCleanup(() => unlistenRun?.());
 

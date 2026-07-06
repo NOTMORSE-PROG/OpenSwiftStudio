@@ -537,3 +537,37 @@ html, body {
 .console__jump .codicon {
   font-size: 13px;
 }
+
+/* Sidebar restore notice (M1-7) */
+.sidebar__notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--vsc-fg);
+  background: var(--vsc-input-bg);
+  border-left: 2px solid var(--vsc-error-fg);
+  border-radius: 2px;
+}
+
+.sidebar__notice-dismiss {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--vsc-fg-secondary);
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+}
+
+.sidebar__notice-dismiss:hover {
+  color: var(--vsc-fg);
+}
+
+.sidebar__notice-dismiss .codicon {
+  font-size: 13px;
+}

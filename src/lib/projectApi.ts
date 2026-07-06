@@ -93,6 +93,25 @@ export const startRun = (config: BuildConfig): Promise<void> =>
 /** Kill the active run's process tree. No-op when nothing is running. */
 export const stopRun = (): Promise<void> => invoke<void>("run_stop");
 
+// ---------- Session persistence (M1-7) ----------
+
+/// Mirrors src-tauri/src/project/session.rs::SessionState.
+export type SessionState = {
+  schemaVersion: number;
+  lastProjectPath?: string;
+  buildConfig?: BuildConfig;
+  activeView?: string;
+  openFiles?: string[];
+};
+
+export const loadSession = (): Promise<SessionState | null> =>
+  invoke<SessionState | null>("session_load");
+
+export const saveSession = (state: SessionState): Promise<void> =>
+  invoke<void>("session_save", { state });
+
+export const clearSession = (): Promise<void> => invoke<void>("session_clear");
+
 const PROJECT_RUN_EVENT = "project-run-progress";
 
 /** Subscribe to run-progress events. Returns an unlisten fn; call it from

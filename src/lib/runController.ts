@@ -1,5 +1,5 @@
 // Bridges backend `project-run-progress` events to frontend state (M1-5 /
-// M1-6). Install once at app start; it owns the single event subscription and
+// M1-6). Install once at app start; it owns the single event listener and
 // the Run/Stop side effects (auto-revealing the Console on run start).
 
 import { setActivePanelTab, setPanelCollapsed } from "../state/appState";
