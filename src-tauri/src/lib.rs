@@ -11,9 +11,35 @@ mod project;
 mod setup;
 mod ipc;
 
+/// Payload forwarded to the running instance when a second launch is blocked
+/// (M1-11). Carries the second process's argv + cwd; M1-12 consumes it to open
+/// a project passed on the command line.
+#[derive(Clone, serde::Serialize)]
+struct SingleInstancePayload {
+    args: Vec<String>,
+    cwd: String,
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+
+    // Single-instance MUST be registered before every other plugin (its
+    // callback fires in the already-running instance when a second launch
+    // happens; the second process then exits). Desktop-only. It forwards the
+    // second launch's argv/cwd via a `single-instance` event (M1-12's
+    // transport) and focuses the existing window.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+        use tauri::{Emitter, Manager};
+        let _ = app.emit("single-instance", SingleInstancePayload { args: argv, cwd });
+        if let Some(window) = app.webview_windows().values().next() {
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }));
+
+    builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
