@@ -17,17 +17,19 @@ import {
   currentProject,
   hasExecutable,
   isRunActive,
+  recentProjects,
   runConfig,
-  setCurrentProject,
-  setHasExecutable,
-  setProjectFiles,
   setProjectOpenError,
-  setProjectOpenInProgress,
   setRunConfig,
 } from "../state/projectState";
 import { resetSetup } from "../lib/setupApi";
-import { closeProject, getProjectFiles, hasExecutableProduct, openProject } from "../lib/projectApi";
+import { closeProject } from "../lib/projectApi";
+import { openProjectByPath } from "../lib/projectActions";
 import { triggerRun, triggerStop } from "../lib/runController";
+
+/// Last path segment for a project display label.
+const projectBasename = (p: string): string =>
+  p.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || p;
 
 /// Drive the open-folder picker → project_open → project_get_files chain.
 /// Surfaces failures via `projectOpenError` so the wizard-style alert in the
@@ -47,22 +49,7 @@ const runProjectOpen = async () => {
   if (typeof selected !== "string") {
     return; // user cancelled
   }
-  const path = selected;
-  setProjectOpenInProgress(true);
-  try {
-    const meta = await openProject(path);
-    const files = await getProjectFiles(path);
-    setCurrentProject(meta);
-    setProjectFiles(files);
-    setHasExecutable(hasExecutableProduct(meta));
-    setActiveView("files");
-  } catch (err) {
-    console.error("project_open failed:", err);
-    setProjectOpenError(String(err));
-    clearProject();
-  } finally {
-    setProjectOpenInProgress(false);
-  }
+  await openProjectByPath(selected);
 };
 
 const runProjectClose = async () => {
@@ -100,6 +87,15 @@ const commands = (): Command[] => [
   ...(currentProject()
     ? [{ id: "project.close", label: "Project: Close Folder", run: () => { void runProjectClose(); } } as const]
     : []),
+  // project.openRecent flow: one entry per recent project (excluding the one
+  // already open), newest first. Selecting one opens via the shared path.
+  ...recentProjects()
+    .filter((p) => p !== currentProject()?.rootPath)
+    .map((p) => ({
+      id: `project.openRecent:${p}`,
+      label: `Open Recent: ${projectBasename(p)}`,
+      run: () => { void openProjectByPath(p); },
+    })),
   { id: "project.new",  label: "Project: New (wires up in M1 chunk 4)",  run: () => console.log("M1 chunk 4") },
   ...(currentProject() && hasExecutable() && !isRunActive()
     ? [{ id: "run.start", label: "Run: Start", run: () => { void triggerRun(); } } as const]

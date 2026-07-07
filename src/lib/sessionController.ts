@@ -7,20 +7,13 @@ import { createEffect, createSignal } from "solid-js";
 import { activeView, setActiveView, type ActivityView } from "../state/appState";
 import {
   currentProject,
+  recentProjects,
   runConfig,
-  setCurrentProject,
-  setHasExecutable,
-  setProjectFiles,
+  setRecentProjects,
   setRunConfig,
 } from "../state/projectState";
-import {
-  getProjectFiles,
-  hasExecutableProduct,
-  loadSession,
-  openProject,
-  saveSession,
-  type SessionState,
-} from "./projectApi";
+import { loadSession, saveSession, type SessionState } from "./projectApi";
+import { openProjectByPath } from "./projectActions";
 
 // Must match src-tauri/src/project/session.rs::SESSION_SCHEMA_VERSION.
 const SESSION_SCHEMA_VERSION = 1;
@@ -43,6 +36,7 @@ const snapshot = (): SessionState => ({
   lastProjectPath: currentProject()?.rootPath,
   buildConfig: runConfig(),
   activeView: activeView(),
+  recentProjects: recentProjects(),
 });
 
 /// Load session.json and re-apply it. Runs once on launch.
@@ -52,17 +46,12 @@ export const restoreSession = async () => {
     if (s) {
       if (isBuildConfig(s.buildConfig)) setRunConfig(s.buildConfig);
       if (s.activeView) setActiveView(s.activeView as ActivityView);
+      if (s.recentProjects) setRecentProjects(s.recentProjects);
       if (s.lastProjectPath) {
-        try {
-          const meta = await openProject(s.lastProjectPath);
-          const files = await getProjectFiles(s.lastProjectPath);
-          setCurrentProject(meta);
-          setProjectFiles(files);
-          setHasExecutable(hasExecutableProduct(meta));
-        } catch (err) {
-          // Folder deleted/moved/unparseable since last session -> non-blocking
-          // notice, stay on the welcome view. (project_open surfaced the error.)
-          console.warn("could not reopen last project:", err);
+        // Reuse the shared open path; don't re-record recents (it's already
+        // at the front). Failure -> non-blocking notice + welcome view.
+        const ok = await openProjectByPath(s.lastProjectPath, { recordRecent: false });
+        if (!ok) {
           setRestoreNotice(`Could not reopen the last project at ${s.lastProjectPath}.`);
         }
       }

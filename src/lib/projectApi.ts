@@ -102,6 +102,7 @@ export type SessionState = {
   buildConfig?: BuildConfig;
   activeView?: string;
   openFiles?: string[];
+  recentProjects?: string[];
 };
 
 export const loadSession = (): Promise<SessionState | null> =>
@@ -111,6 +112,15 @@ export const saveSession = (state: SessionState): Promise<void> =>
   invoke<void>("session_save", { state });
 
 export const clearSession = (): Promise<void> => invoke<void>("session_clear");
+
+/// Promote `path` to the front of the recent list (deduped, capped) — pure
+/// compute on the backend; the caller persists the result via the session save.
+export const mruPush = (recent: string[], path: string): Promise<string[]> =>
+  invoke<string[]>("session_mru_push", { recent, path });
+
+/// Existence check per path (to mark stale recent entries).
+export const pathsExist = (paths: string[]): Promise<boolean[]> =>
+  invoke<boolean[]>("paths_exist", { paths });
 
 const PROJECT_RUN_EVENT = "project-run-progress";
 

@@ -46,6 +46,31 @@ pub struct SessionState {
     /// Forward-compat slot for open editor tabs (populated when M2-5 lands).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub open_files: Vec<String>,
+    /// Most-recent-first list of opened project roots (M1-8), deduped
+    /// case-insensitively and capped at `RECENT_PROJECTS_CAP`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recent_projects: Vec<String>,
+}
+
+/// Cap on the Recent Projects list (M1-8).
+pub const RECENT_PROJECTS_CAP: usize = 10;
+
+/// Return a new most-recent-first list with `path` promoted to the front,
+/// any case-insensitive duplicate of it removed, and the result capped at
+/// `cap`. Windows filesystems are case-insensitive, so `C:\Foo` and `c:\foo`
+/// collapse to one entry (the newest spelling wins). Missing paths are NOT
+/// pruned here — the UI marks stale entries and offers removal (M1-8 AC).
+pub fn mru_push(existing: &[String], path: &str, cap: usize) -> Vec<String> {
+    let key = path.to_lowercase();
+    let mut out: Vec<String> = Vec::with_capacity(existing.len() + 1);
+    out.push(path.to_string());
+    for e in existing {
+        if e.to_lowercase() != key {
+            out.push(e.clone());
+        }
+    }
+    out.truncate(cap);
+    out
 }
 
 impl Default for SessionState {
@@ -56,6 +81,7 @@ impl Default for SessionState {
             build_config: None,
             active_view: None,
             open_files: Vec::new(),
+            recent_projects: Vec::new(),
         }
     }
 }
@@ -135,6 +161,7 @@ mod tests {
             build_config: Some("release".to_string()),
             active_view: Some("files".to_string()),
             open_files: Vec::new(),
+            recent_projects: Vec::new(),
         }
     }
 
@@ -211,6 +238,51 @@ mod tests {
         assert_eq!(parsed.last_project_path, Some("C:\\p".to_string()));
         assert_eq!(parsed.build_config, None);
         assert!(parsed.open_files.is_empty());
+    }
+
+    #[test]
+    fn recent_projects_survive_a_write_read_round_trip() {
+        let dir = tempdir();
+        let mut s = sample();
+        s.recent_projects = vec!["C:\\a".to_string(), "C:\\b".to_string()];
+        write_session_at(&dir, &s).expect("write");
+        let loaded = read_session_from(&dir.join(SESSION_FILE_NAME)).expect("read").expect("some");
+        assert_eq!(loaded.recent_projects, vec!["C:\\a".to_string(), "C:\\b".to_string()]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn mru_push_promotes_to_front_and_dedupes_case_insensitively() {
+        let existing = vec!["C:\\a".to_string(), "C:\\b".to_string()];
+        // Re-open "a" (different case) -> moves to front, no duplicate.
+        let out = mru_push(&existing, "c:\\A", RECENT_PROJECTS_CAP);
+        assert_eq!(out, vec!["c:\\A".to_string(), "C:\\b".to_string()]);
+    }
+
+    #[test]
+    fn mru_push_prepends_new_entry() {
+        let existing = vec!["C:\\a".to_string()];
+        let out = mru_push(&existing, "C:\\b", RECENT_PROJECTS_CAP);
+        assert_eq!(out, vec!["C:\\b".to_string(), "C:\\a".to_string()]);
+    }
+
+    #[test]
+    fn mru_push_caps_length_keeping_newest() {
+        let existing: Vec<String> = (0..12).map(|i| format!("C:\\p{i}")).collect();
+        let out = mru_push(&existing, "C:\\new", 10);
+        assert_eq!(out.len(), 10);
+        assert_eq!(out[0], "C:\\new");
+        // The two oldest (p10, p11) drop off the end.
+        assert!(!out.contains(&"C:\\p11".to_string()));
+    }
+
+    #[test]
+    fn mru_push_does_not_prune_missing_paths() {
+        // A path that doesn't exist on disk is still kept (UI marks stale, not us).
+        let existing = vec!["C:\\this\\does\\not\\exist".to_string()];
+        let out = mru_push(&existing, "C:\\also\\gone", 10);
+        assert_eq!(out.len(), 2);
+        assert!(out.contains(&"C:\\this\\does\\not\\exist".to_string()));
     }
 
     #[test]

@@ -359,6 +359,22 @@ pub fn session_clear() -> Result<(), String> {
     session::clear_session().map_err(|e| e.to_string())
 }
 
+/// Pure MRU update (M1-8): promote `path` to the front of `recent`, dedupe
+/// case-insensitively, cap at the recent-projects cap. No I/O — the frontend
+/// persists the returned list via the normal session autosave (single writer).
+#[tauri::command]
+pub fn session_mru_push(recent: Vec<String>, path: String) -> Vec<String> {
+    session::mru_push(&recent, &path, session::RECENT_PROJECTS_CAP)
+}
+
+/// Existence check for each path (M1-8): lets the welcome/palette mark recent
+/// entries whose folder was deleted so the user can remove instead of hitting a
+/// raw open error.
+#[tauri::command]
+pub fn paths_exist(paths: Vec<String>) -> Vec<bool> {
+    paths.iter().map(|p| PathBuf::from(p).is_dir()).collect()
+}
+
 // ---------- Forward-looking stubs ----------
 //
 // These define the IPC surface for future milestones. Bodies return an error

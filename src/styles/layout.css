@@ -571,3 +571,95 @@ html, body {
 .sidebar__notice-dismiss .codicon {
   font-size: 13px;
 }
+
+/* Welcome-tab Recent Projects (M1-8) */
+.welcome-recent {
+  margin: 28px auto 0;
+  max-width: 460px;
+  text-align: left;
+}
+
+.welcome-recent__title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--vsc-fg-secondary);
+  margin-bottom: 6px;
+}
+
+.welcome-recent__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.welcome-recent__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: var(--vsc-fg);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 3px;
+  text-align: left;
+}
+
+.welcome-recent__open:hover:not(:disabled) {
+  background: var(--vsc-list-hover-bg);
+}
+
+.welcome-recent__open:disabled {
+  cursor: default;
+  color: var(--vsc-fg-secondary);
+}
+
+.welcome-recent__name {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.welcome-recent__path {
+  min-width: 0;
+  font-size: 11px;
+  color: var(--vsc-fg-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* keep the meaningful tail (folder) visible when truncated */
+}
+
+.welcome-recent__row--stale .welcome-recent__name {
+  text-decoration: line-through;
+}
+
+.welcome-recent__badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--vsc-error-fg);
+  border: 1px solid var(--vsc-error-fg);
+  border-radius: 2px;
+  padding: 0 4px;
+}
+
+.welcome-recent__remove {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--vsc-fg-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  padding: 2px;
+}
+
+.welcome-recent__remove:hover {
+  color: var(--vsc-fg);
+}
+
+.welcome-recent__remove .codicon {
+  font-size: 13px;
+}

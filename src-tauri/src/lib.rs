@@ -46,6 +46,8 @@ pub fn run() {
             ipc::session_load,
             ipc::session_save,
             ipc::session_clear,
+            ipc::session_mru_push,
+            ipc::paths_exist,
             ipc::debug_attach,
             ipc::settings_get,
             ipc::settings_set,

@@ -30,6 +30,10 @@ export const isRunActive = (): boolean => runStatus() !== "idle";
 /// button (mirrors the backend's `executable_name` check). Set on project open.
 export const [hasExecutable, setHasExecutable] = createSignal(false);
 
+/// Most-recent-first list of opened project roots (M1-8). Persisted in
+/// session.json; not cleared when a project closes.
+export const [recentProjects, setRecentProjects] = createSignal<string[]>([]);
+
 // ---------- Console ring buffer (M1-6) ----------
 
 export type ConsoleStream = "stdout" | "stderr" | "meta";
