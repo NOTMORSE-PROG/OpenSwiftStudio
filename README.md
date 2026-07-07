@@ -30,10 +30,29 @@ OpenSwiftStudio removes the wall. Write Swift on your Windows laptop. See your a
 
 ## Requirements
 
-- Windows 10 or 11 (64-bit)
-- A free Apple ID (used to download the iOS SDK from Apple — never bundled by us)
-- About 20 GB of disk space for the toolchain
-- A real iPhone is optional — only needed for testing on physical hardware
+OpenSwiftStudio is built to run on any Windows PC that meets the minimums below. It needs no dedicated GPU and no special hardware — just enough CPU, RAM, and disk to run the Swift compiler and a WSL2 Linux distro alongside the editor.
+
+**Operating system**
+- Windows 10 version 1903 (build 18362) or newer, or Windows 11 — 64-bit
+- 64-bit x86-64 processor (Intel or AMD). Windows on ARM is not supported yet.
+- Hardware virtualization enabled in BIOS/UEFI. WSL2 (installed for you by the setup wizard) runs xtool, which processes the iOS SDK and deploys to real devices.
+
+**Hardware — minimum / recommended**
+
+| | Minimum | Recommended |
+|---|---|---|
+| Processor | 4-core x86-64 | 6-core or better (Swift builds are CPU-bound) |
+| Memory | 8 GB RAM | 16 GB RAM |
+| Storage | 20 GB free | 40 GB+ free on an SSD |
+| Display | 1280x720 | 1080p or higher |
+
+Storage covers the Swift toolchain, a WSL2 Linux distro, and the iOS SDK — the SDK is the largest piece and is downloaded during setup, never bundled by us.
+
+**Accounts and extras**
+- A free Apple ID — used only to download the iOS SDK from Apple and to sign apps for your own devices. Apple software is never bundled by us.
+- A real iPhone is optional — only needed for testing on physical hardware over USB.
+
+> These requirements are provisional while OpenSwiftStudio is in pre-release and may change before v0.1.
 
 ## Install
 
