@@ -626,7 +626,7 @@ const ToolchainStep: Component<ToolchainStepProps> = (props) => {
       <h2 class="setup-step__heading">Toolchain prerequisites</h2>
       <p class="setup-step__body">
         Swift on Windows compiles against MSVC, so the wizard checks both. The Install
-        button below the Swift row downloads Swift 6.3.1 (about 1.7 GB), verifies its
+        button below the Swift row downloads Swift 6.2.4 (about 900 MB), verifies its
         SHA256, and runs the per-user installer. No administrator permission required.
       </p>
 
@@ -652,8 +652,8 @@ const ToolchainStep: Component<ToolchainStepProps> = (props) => {
           id="toolchain"
           run={installToolchain}
           afterSuccess={runSwiftDetect}
-          hint="Per-user install — no admin needed. Downloads ~1.7 GB, verifies SHA256, then runs the installer."
-          buttonLabel="Install Swift 6.3.1"
+          hint="Per-user install — no admin needed. Downloads ~900 MB, verifies SHA256, then runs the installer."
+          buttonLabel="Install Swift 6.2.4"
         />
       </Show>
     </section>
