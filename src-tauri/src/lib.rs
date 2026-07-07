@@ -48,6 +48,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             ipc::app_info,
             ipc::app_get_toolchain,
+            ipc::app_toolchain_selftest,
             ipc::setup_get_state,
             ipc::setup_mark_complete,
             ipc::setup_reset,

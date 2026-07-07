@@ -69,6 +69,22 @@ export const checkXtool = (): Promise<SetupCheckResult> =>
 
 export const openExternal = (url: string): Promise<void> => shellOpen(url);
 
+// ---------- Toolchain compile self-test (FU-8) ----------
+
+/// Mirrors src-tauri/src/setup/selftest.rs::SelfTestResult. `crashed` means the
+/// toolchain compiled-crashed on this machine (a version bug like the 6.3.x
+/// Windows Foundation crash, or an unsupported-instruction crash on an old CPU)
+/// — surface a clear message rather than letting Run fail cryptically.
+export type SelfTestResult =
+  | { kind: "healthy" }
+  | { kind: "crashed"; exitCode: number }
+  | { kind: "failed"; exitCode: number; detail: string };
+
+/// Build a throwaway package with the installed toolchain to confirm it can
+/// actually compile on this hardware. Runs after Swift is detected in setup.
+export const toolchainSelfTest = (): Promise<SelfTestResult> =>
+  invoke<SelfTestResult>("app_toolchain_selftest");
+
 // ---------- Installs ----------
 
 export type InstallOutcome =

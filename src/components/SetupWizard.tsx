@@ -23,10 +23,12 @@ import {
   InstallId,
   InstallOutcome,
   ProgressPhase,
+  SelfTestResult,
   SetupCheckResult,
   SetupState,
   StepRecord,
   checkToolchain,
+  toolchainSelfTest,
   checkUsbipd,
   checkVsBuildTools,
   checkWsl2,
@@ -556,6 +558,9 @@ type ToolchainStepProps = {
 const ToolchainStep: Component<ToolchainStepProps> = (props) => {
   const [vsBusy, setVsBusy] = createSignal(false);
   const [swiftBusy, setSwiftBusy] = createSignal(false);
+  // FU-8: result of compiling a throwaway package with the detected toolchain,
+  // to catch a toolchain that installs but can't compile on this machine.
+  const [selfTest, setSelfTest] = createSignal<SelfTestResult | null>(null);
 
   // Toolchain step status reflects the *combined* prereqs: only "detected"
   // when both VS Build Tools and Swift are found, otherwise the worst-case
@@ -611,6 +616,19 @@ const ToolchainStep: Component<ToolchainStepProps> = (props) => {
       const result = await checkToolchain();
       props.onSwiftResult(result);
       updateCombinedStatus();
+      // FU-8: when Swift is present, confirm it actually compiles on this
+      // machine (a toolchain can install cleanly yet crash on codegen — the
+      // 6.3.x Windows Foundation bug, or an unsupported-instruction crash on an
+      // old CPU). Non-fatal: a `failed` result (e.g. transient) is ignored;
+      // only a `crashed` result is surfaced.
+      setSelfTest(null);
+      if (result.found) {
+        try {
+          setSelfTest(await toolchainSelfTest());
+        } catch (err) {
+          console.error("toolchain self-test failed to run:", err);
+        }
+      }
     } catch (err) {
       updateStep("toolchain", {
         status: "error",
@@ -655,6 +673,18 @@ const ToolchainStep: Component<ToolchainStepProps> = (props) => {
           hint="Per-user install — no admin needed. Downloads ~900 MB, verifies SHA256, then runs the installer."
           buttonLabel="Install Swift 6.2.4"
         />
+      </Show>
+      <Show when={selfTest()?.kind === "crashed"}>
+        <div class="setup-install__alert setup-install__alert--error setup-step__selftest">
+          <strong>Swift installed, but it crashed compiling on this machine.</strong>
+          <p>
+            A test build failed with a hardware/toolchain crash (exit code{" "}
+            {(selfTest() as { exitCode: number }).exitCode}). This is a known issue with
+            some Swift releases on certain Windows CPUs — it is not your code. Building and
+            running projects will not work until this is resolved. Try a different Swift
+            version, or check the hardware requirements.
+          </p>
+        </div>
       </Show>
     </section>
   );

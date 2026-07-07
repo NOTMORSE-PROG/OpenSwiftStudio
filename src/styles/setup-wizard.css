@@ -456,3 +456,14 @@
   background: var(--vsc-input-bg);
   border-radius: 3px;
 }
+
+/* Toolchain compile self-test warning (FU-8) */
+.setup-step__selftest {
+  margin-top: 12px;
+}
+
+.setup-step__selftest p {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}

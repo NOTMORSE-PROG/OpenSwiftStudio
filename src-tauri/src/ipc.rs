@@ -21,6 +21,7 @@ use crate::project::session::{self, SessionState};
 use crate::project::{self, FileTreeNode, PackageDescription, ProjectState, RunState};
 use crate::setup::checks::{self, CheckResult};
 use crate::setup::installs::{self, InstallOutcome, ProgressEvent, ProgressPhase};
+use crate::setup::selftest;
 use crate::setup::state::{self, SetupState};
 use crate::setup::xtool;
 
@@ -280,6 +281,18 @@ pub fn project_get_files(path: String) -> Result<Vec<FileTreeNode>, String> {
 #[tauri::command]
 pub fn app_get_toolchain() -> CheckResult {
     checks::check_toolchain()
+}
+
+/// Compile self-test (FU-8): build a throwaway minimal package and report
+/// whether the toolchain actually compiles on this machine. Async because
+/// `swift build` takes ~1-30 s. The setup wizard runs this after install so a
+/// toolchain that crashes on this hardware (version bug or unsupported-CPU
+/// instruction) surfaces a clear message instead of a cryptic Run failure.
+#[tauri::command]
+pub async fn app_toolchain_selftest() -> Result<selftest::SelfTestResult, String> {
+    tauri::async_runtime::spawn_blocking(selftest::run_toolchain_selftest)
+        .await
+        .map_err(|e| format!("self-test task panicked: {e}"))
 }
 
 // ---------- Run (M1-5 / M1-6 / M1-13) ----------
