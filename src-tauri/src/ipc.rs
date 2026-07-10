@@ -234,7 +234,9 @@ pub fn setup_get_stored_apple_id() -> Result<Option<String>, String> {
 #[tauri::command]
 pub fn project_open(
     path: String,
+    app: tauri::AppHandle,
     current: tauri::State<'_, CurrentProject>,
+    watch: tauri::State<'_, project::ManifestWatch>,
 ) -> Result<PackageDescription, String> {
     let root = PathBuf::from(&path);
     let package = project::parse_package(&root).map_err(|e| e.message)?;
@@ -243,13 +245,93 @@ pub fn project_open(
         opened_at: Utc::now(),
     };
     *current.lock().map_err(|e| format!("project state lock poisoned: {e}"))? = Some(state);
+
+    // Watch Package.swift for external edits (M1-15). Replacing the slot drops
+    // any previous project's watcher. A watcher failure is non-fatal: the
+    // project still opens, only live re-parse is lost.
+    let manifest_watcher = project::watch_manifest(&root, {
+        let app = app.clone();
+        let root = root.clone();
+        move || refresh_manifest(&app, &root)
+    });
+    let mut watch_slot = watch
+        .lock()
+        .map_err(|e| format!("manifest watch lock poisoned: {e}"))?;
+    *watch_slot = match manifest_watcher {
+        Ok(w) => Some(w),
+        Err(err) => {
+            eprintln!("manifest watcher unavailable for {}: {err}", root.display());
+            None
+        }
+    };
+
     Ok(package)
 }
 
 #[tauri::command]
-pub fn project_close(current: tauri::State<'_, CurrentProject>) -> Result<(), String> {
+pub fn project_close(
+    current: tauri::State<'_, CurrentProject>,
+    watch: tauri::State<'_, project::ManifestWatch>,
+) -> Result<(), String> {
     *current.lock().map_err(|e| format!("project state lock poisoned: {e}"))? = None;
+    // Dropping the watcher stops its thread.
+    *watch
+        .lock()
+        .map_err(|e| format!("manifest watch lock poisoned: {e}"))? = None;
     Ok(())
+}
+
+/// Wire payload for `project-manifest-changed` (M1-15).
+#[derive(Clone, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum ManifestChange {
+    /// Re-parse succeeded; `meta` is the fresh project model.
+    Updated { meta: PackageDescription },
+    /// Package.swift is gone/unreadable; the previous model is kept so the
+    /// user can restore the file without losing the open project.
+    Missing,
+}
+
+const MANIFEST_CHANGED_EVENT: &str = "project-manifest-changed";
+
+/// Watcher callback: re-parse the manifest and publish the result. Runs on the
+/// watcher's thread. The root guard skips stale events that were in flight
+/// while the user switched projects (the new watcher already replaced ours,
+/// but a debounced batch may still land after the swap).
+fn refresh_manifest(app: &tauri::AppHandle, root: &std::path::Path) {
+    use tauri::Manager;
+
+    let current = app.state::<CurrentProject>();
+    let event = match project::parse_package(root) {
+        Ok(package) => {
+            let mut guard = match current.lock() {
+                Ok(g) => g,
+                Err(_) => return,
+            };
+            match guard.as_mut() {
+                Some(state) if PathBuf::from(&state.package.root_path) == root => {
+                    state.package = package.clone();
+                }
+                _ => return, // project switched or closed since the event fired
+            }
+            ManifestChange::Updated { meta: package }
+        }
+        Err(_) => {
+            let still_current = current
+                .lock()
+                .ok()
+                .and_then(|g| {
+                    g.as_ref()
+                        .map(|s| PathBuf::from(&s.package.root_path) == root)
+                })
+                .unwrap_or(false);
+            if !still_current {
+                return;
+            }
+            ManifestChange::Missing
+        }
+    };
+    let _ = app.emit(MANIFEST_CHANGED_EVENT, event);
 }
 
 /// Returns the parsed manifest of the currently-open project, or `None` when

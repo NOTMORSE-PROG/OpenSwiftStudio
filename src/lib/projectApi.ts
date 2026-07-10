@@ -130,3 +130,19 @@ export const onRunProgress = async (
   handler: (event: RunEvent) => void,
 ): Promise<UnlistenFn> =>
   listen<RunEvent>(PROJECT_RUN_EVENT, (e) => handler(e.payload));
+
+// ---------- Manifest watch (M1-15) ----------
+
+/// Mirrors src-tauri/src/ipc.rs::ManifestChange. `missing` means Package.swift
+/// vanished; the backend keeps the previous model so the project stays open.
+export type ManifestChange =
+  | { kind: "updated"; meta: PackageDescription }
+  | { kind: "missing" };
+
+const MANIFEST_CHANGED_EVENT = "project-manifest-changed";
+
+/** Subscribe to external Package.swift changes (debounced re-parse results). */
+export const onManifestChanged = async (
+  handler: (event: ManifestChange) => void,
+): Promise<UnlistenFn> =>
+  listen<ManifestChange>(MANIFEST_CHANGED_EVENT, (e) => handler(e.payload));

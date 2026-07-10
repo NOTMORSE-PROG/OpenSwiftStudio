@@ -8,6 +8,7 @@ import Panel from "./components/Panel";
 import StatusBar from "./components/StatusBar";
 import CommandPalette, { useCommandPaletteShortcut } from "./components/CommandPalette";
 import SetupWizard from "./components/SetupWizard";
+import { installManifestListener } from "./lib/projectActions";
 import { installRunListener } from "./lib/runController";
 import { installSessionAutosave, restoreSession } from "./lib/sessionController";
 
@@ -19,6 +20,7 @@ const App: Component = () => {
 
   // Single listener for run-progress events for the app's lifetime.
   let unlistenRun: UnlistenFn | undefined;
+  let unlistenManifest: UnlistenFn | undefined;
   onMount(async () => {
     // The window starts hidden (tauri.conf.json `visible: false`) so saved
     // geometry is applied before anything is on screen; reveal after the
@@ -29,9 +31,13 @@ const App: Component = () => {
     await window.setFocus();
 
     unlistenRun = await installRunListener();
+    unlistenManifest = await installManifestListener();
     await restoreSession();
   });
-  onCleanup(() => unlistenRun?.());
+  onCleanup(() => {
+    unlistenRun?.();
+    unlistenManifest?.();
+  });
 
   return (
     <div class="app">

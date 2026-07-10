@@ -10,7 +10,9 @@ pub mod parser;
 pub mod run;
 pub mod session;
 pub mod state;
+pub mod watcher;
 
 pub use parser::{FileTreeNode, PackageDescription, parse_package, read_project_files};
 pub use run::RunState;
 pub use state::ProjectState;
+pub use watcher::{ManifestWatch, watch_manifest};

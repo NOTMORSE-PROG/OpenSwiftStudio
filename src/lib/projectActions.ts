@@ -6,6 +6,7 @@
 import { setActiveView } from "../state/appState";
 import {
   clearProject,
+  currentProject,
   recentProjects,
   setCurrentProject,
   setHasExecutable,
@@ -14,10 +15,12 @@ import {
   setProjectOpenInProgress,
   setRecentProjects,
 } from "../state/projectState";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import {
   getProjectFiles,
   hasExecutableProduct,
   mruPush,
+  onManifestChanged,
   openProject,
 } from "./projectApi";
 
@@ -41,6 +44,32 @@ export const removeRecentProject = (path: string) => {
 /// sets `projectOpenError` and leaves no project open (welcome view). Records
 /// the path into Recent Projects unless `recordRecent` is false (the restore
 /// path skips it — the last project is already at the front).
+/// React to external Package.swift edits (M1-15): the backend already
+/// re-parsed and updated its state; refresh the frontend model + file list.
+/// On `missing`, keep the open project but flag it degraded so the existing
+/// banner explains why targets/products may be stale.
+export const installManifestListener = (): Promise<UnlistenFn> =>
+  onManifestChanged(async (change) => {
+    const project = currentProject();
+    if (!project) return;
+    if (change.kind === "updated") {
+      setCurrentProject(change.meta);
+      setHasExecutable(hasExecutableProduct(change.meta));
+      try {
+        setProjectFiles(await getProjectFiles(change.meta.rootPath));
+      } catch (err) {
+        console.error("file refresh after manifest change failed:", err);
+      }
+    } else {
+      setCurrentProject({
+        ...project,
+        degraded: true,
+        degradedReason:
+          "Package.swift is missing or unreadable; showing the last good project model.",
+      });
+    }
+  });
+
 export const openProjectByPath = async (
   path: string,
   opts?: { recordRecent?: boolean },

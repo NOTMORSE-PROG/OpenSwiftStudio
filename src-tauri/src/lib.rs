@@ -61,6 +61,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .manage::<ipc::CurrentProject>(std::sync::Mutex::new(None))
+        .manage::<project::ManifestWatch>(std::sync::Mutex::new(None))
         .manage::<project::RunState>(project::RunState::default())
         .invoke_handler(tauri::generate_handler![
             ipc::app_info,
