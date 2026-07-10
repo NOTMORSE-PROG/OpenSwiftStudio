@@ -85,14 +85,29 @@ pub enum RunStatus {
 
 /// How a run ended. `exited` carries the program's exit code; `buildFailed`
 /// carries swift build's; `stopped` means the user pressed Stop; `spawnError`
-/// means a subprocess couldn't start (swift missing, binary vanished).
+/// means a subprocess couldn't start (swift missing, binary vanished);
+/// `toolchainCrashed` means `swift build` itself crashed (a Windows exception
+/// exit code) rather than failing to compile the user's code — the Swift
+/// toolchain can't compile on this machine (FU-8).
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum RunOutcome {
     Exited,
     BuildFailed,
+    ToolchainCrashed,
     Stopped,
     SpawnError,
+}
+
+/// Classify a non-zero `swift build` exit into the right outcome: a Windows
+/// crash exit code (top nibble 0xC) means the toolchain itself crashed, not a
+/// compile error.
+fn build_failure_outcome(build_exit: i32) -> RunOutcome {
+    if crate::setup::selftest::is_crash_exit(build_exit) {
+        RunOutcome::ToolchainCrashed
+    } else {
+        RunOutcome::BuildFailed
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -194,7 +209,7 @@ pub fn run_pipeline(
         return;
     }
     if build_exit != 0 {
-        finish(window, state, RunPhase::Build, build_exit, RunOutcome::BuildFailed, None);
+        finish(window, state, RunPhase::Build, build_exit, build_failure_outcome(build_exit), None);
         return;
     }
 
@@ -477,6 +492,17 @@ mod tests {
     }
     fn target(name: &str, kind: &str) -> PackageTarget {
         PackageTarget { name: name.to_string(), kind: Some(kind.to_string()), path: None }
+    }
+
+    #[test]
+    fn build_failure_outcome_distinguishes_toolchain_crash_from_compile_error() {
+        // Windows illegal-instruction exit (the 6.3.x toolchain crash) -> toolchain crash.
+        assert!(matches!(
+            build_failure_outcome(-1073741795),
+            RunOutcome::ToolchainCrashed
+        ));
+        // Normal `swift build` compile error -> build failed.
+        assert!(matches!(build_failure_outcome(1), RunOutcome::BuildFailed));
     }
 
     #[test]

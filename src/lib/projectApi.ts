@@ -79,7 +79,7 @@ export type RunEvent =
       kind: "exit";
       phase: "build" | "run";
       code: number;
-      outcome: "exited" | "buildFailed" | "stopped" | "spawnError";
+      outcome: "exited" | "buildFailed" | "toolchainCrashed" | "stopped" | "spawnError";
       message?: string;
     };
 

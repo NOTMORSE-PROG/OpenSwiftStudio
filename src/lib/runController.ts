@@ -46,6 +46,8 @@ const exitMessage = (event: Extract<RunEvent, { kind: "exit" }>): string => {
       return `> Program exited with code ${event.code}`;
     case "buildFailed":
       return `> Build failed (exit code ${event.code})`;
+    case "toolchainCrashed":
+      return `> Swift toolchain crashed while compiling (exit 0x${(event.code >>> 0).toString(16).toUpperCase()}) — this is not your code. The toolchain cannot compile on this machine; see the setup wizard's Swift check.`;
     case "stopped":
       return "> Stopped";
     case "spawnError":

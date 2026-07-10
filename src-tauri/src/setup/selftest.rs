@@ -48,7 +48,9 @@ pub enum SelfTestResult {
 /// (`0xC0000000`), so the top nibble of the u32 is `0xC`: illegal instruction
 /// (`0xC000001D`), access violation (`0xC0000005`), stack overflow
 /// (`0xC00000FD`), etc. A normal build error is a small positive code.
-fn is_crash_exit(code: i32) -> bool {
+/// Shared with the run pipeline (M1-5) so a toolchain that crashes mid-build is
+/// labeled distinctly from a compile error (FU-8 AC#2).
+pub(crate) fn is_crash_exit(code: i32) -> bool {
     (code as u32) >> 28 == 0xC
 }
 
