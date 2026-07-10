@@ -39,6 +39,23 @@ pub fn run() {
         }
     }));
 
+    // Window geometry (size / position / maximized) persists across restarts
+    // via the official window-state plugin. VISIBLE is deliberately excluded:
+    // the window starts hidden (tauri.conf.json `visible: false`) and the
+    // frontend reveals it after first render, so geometry is restored before
+    // anything is shown (no startup jump) and first launch cannot get stuck
+    // hidden (the plugin's show-on-restore is unreliable without saved state).
+    #[cfg(desktop)]
+    let builder = builder.plugin(
+        tauri_plugin_window_state::Builder::default()
+            .with_state_flags(
+                tauri_plugin_window_state::StateFlags::SIZE
+                    | tauri_plugin_window_state::StateFlags::POSITION
+                    | tauri_plugin_window_state::StateFlags::MAXIMIZED,
+            )
+            .build(),
+    );
+
     builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())

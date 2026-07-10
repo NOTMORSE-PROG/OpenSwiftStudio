@@ -1,5 +1,6 @@
 import { Component, onCleanup, onMount } from "solid-js";
 import type { UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import ActivityBar from "./components/ActivityBar";
 import Sidebar from "./components/Sidebar";
 import EditorArea from "./components/EditorArea";
@@ -19,6 +20,14 @@ const App: Component = () => {
   // Single listener for run-progress events for the app's lifetime.
   let unlistenRun: UnlistenFn | undefined;
   onMount(async () => {
+    // The window starts hidden (tauri.conf.json `visible: false`) so saved
+    // geometry is applied before anything is on screen; reveal after the
+    // first render. Frontend-owned so a first launch with no saved state
+    // can never stay hidden.
+    const window = getCurrentWindow();
+    await window.show();
+    await window.setFocus();
+
     unlistenRun = await installRunListener();
     await restoreSession();
   });
